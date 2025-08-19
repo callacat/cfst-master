@@ -11,6 +11,7 @@ type DeviceResult struct {
     DLMbps     float64 `json:"dl_mbps"`
     JitterMs   int     `json:"jitter_ms"`
     LossPct    float64 `json:"loss_pct"`
+    Score      float64 `json:"score"`       // 新增字段，用于存储综合打分
 }
 
 // LineResult 最终选出的每线路结果
@@ -28,7 +29,13 @@ type FinalResult struct {
 }
 
 // BuildResult 将选中结果包装成 FinalResult
-func BuildResult(sel map[string][]string, cfg interface{ /* 接口匹配 cfg.DNS */ }) FinalResult {
+func BuildResult(sel map[string][]string, cfg interface {
+    DNS struct {
+        Domain    string
+        Subdomain string
+        Lines     []struct{ Operator string }
+    }
+}) FinalResult {
     fr := FinalResult{
         Timestamp: time.Now(),
         Domain:    cfg.DNS.Domain,
