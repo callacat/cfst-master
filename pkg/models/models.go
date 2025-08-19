@@ -1,6 +1,9 @@
 package models
 
-import "time"
+import (
+    "time"
+    "controller/pkg/config" // 1. ADD THIS IMPORT
+)
 
 // DeviceResult 设备推送的单条测试记录
 type DeviceResult struct {
@@ -29,13 +32,8 @@ type FinalResult struct {
 }
 
 // BuildResult 将选中结果包装成 FinalResult
-func BuildResult(sel map[string][]string, cfg interface {
-    DNS struct {
-        Domain    string
-        Subdomain string
-        Lines     []struct{ Operator string }
-    }
-}) FinalResult {
+// 2. CHANGE THE TYPE OF THE 'cfg' PARAMETER HERE
+func BuildResult(sel map[string][]string, cfg *config.Config) FinalResult {
     fr := FinalResult{
         Timestamp: time.Now(),
         Domain:    cfg.DNS.Domain,
