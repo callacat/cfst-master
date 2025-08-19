@@ -1,0 +1,36 @@
+# GitHub Gist
+gist:
+  token: "${GITHUB_TOKEN}"       # GitHub Personal Access Token (gist 权限)
+  device_gists:                  # 设备推送的 Gist ID 列表
+    - "aaaabbbbcccc111122223333"
+    - "ddddeeeeffff444455556666"
+    - "gggghhhhiiii777788889999"
+  result_gist_id: "xxxxxxx"      # 主控写入结果的 Gist ID，留空则首次创建
+
+# DNS 设置
+dns:
+  provider: "dnspod"             # dnspod / huawei
+  domain: "example.com"
+  subdomain: "cf"                # cf.example.com
+  ttl: 180
+  lines:
+    - operator: "ct"             # 电信
+      recordset_id: "12345678"
+      cap: 2
+    - operator: "cu"             # 联通
+      recordset_id: "23456789"
+      cap: 2
+    - operator: "cm"             # 移动
+      recordset_id: "34567890"
+      cap: 2
+
+# 打分权重
+scoring:
+  latency_weight: 0.5
+  speed_weight:   0.3
+  jitter_weight:  0.1
+  loss_weight:    0.1
+
+# 可选：华为云项目 ID
+huawei:
+  project_id: "${HUAWEI_PROJECT_ID}"
