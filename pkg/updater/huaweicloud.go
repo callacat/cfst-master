@@ -1,6 +1,6 @@
 package updater
 
-import "github.com/yourorg/multi-net-controller/pkg/models"
+import "controller/pkg/models"
 
 // UpdateHuaweiCloud 调用华为云 DNS API 更新记录
 func UpdateHuaweiCloud(records []models.Result, cfg models.Config) error {
