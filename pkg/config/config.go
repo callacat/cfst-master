@@ -20,16 +20,18 @@ type Config struct {
         Lines       []Line `yaml:"lines"`
     } `yaml:"dns"`
 
-    Scoring struct {
-        LatencyWeight float64 `yaml:"latency_weight"`
-        SpeedWeight   float64 `yaml:"speed_weight"`
-        JitterWeight  float64 `yaml:"jitter_weight"`
-        LossWeight    float64 `yaml:"loss_weight"`
-    } `yaml:"scoring"`
+    Scoring Scoring `yaml:"scoring"` // Use the new named type here
 
     Huawei struct {
         ProjectID string `yaml:"project_id"`
     } `yaml:"huawei"`
+}
+// Define Scoring as its own exported type
+type Scoring struct {
+    LatencyWeight float64 `yaml:"latency_weight"`
+    SpeedWeight   float64 `yaml:"speed_weight"`
+    JitterWeight  float64 `yaml:"jitter_weight"`
+    LossWeight    float64 `yaml:"loss_weight"`
 }
 
 type Line struct {

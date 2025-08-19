@@ -3,13 +3,12 @@ package gist
 import (
     "bytes"
     "encoding/json"
-    "fmt"
     "io"
     "net/http"
-    "strings"
 
     "controller/pkg/models"
 )
+// ...
 
 // Client wraps GitHub Gist API
 type Client struct {
