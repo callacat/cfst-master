@@ -1,49 +1,86 @@
 package selector
 
 import (
-    "sort"
-    "controller/pkg/models"
-    "controller/pkg/config"
+	"sort"
+
+	"controller/pkg/config"
+	"controller/pkg/models"
 )
 
-// SelectTop 对每线路的 DeviceResult 打分并选 Top cap 个 IP
+// [修改] 返回值模型更丰富
 func SelectTop(
-    ag map[string][]models.DeviceResult,
-    lines []config.Line,
-    sc config.Scoring,
-) map[string][]string {
-    sel := make(map[string][]string)
-    for _, ln := range lines {
-        list := ag[ln.Operator]
-	// 计算分数时：
-	for i, r := range list {
-		score := sc.LatencyWeight*(1/float64(r.LatencyMs)) +
-				sc.SpeedWeight*r.DLMbps -
-				sc.JitterWeight*float64(r.JitterMs) -
-				sc.LossWeight*r.LossPct
-		list[i].Score = score
-	}
+	ag map[string][]models.DeviceResult,
+	lines []config.Line,
+	sc config.Scoring,
+	th config.Thresholds,
+) map[string]models.LineResult {
 
-        // 去重同 IP & 排序
-        m := map[string]models.DeviceResult{}
-        for _, r := range list {
-            prev, ok := m[r.IP]
-            if !ok || r.Score > prev.Score {
-                m[r.IP] = r
-            }
-        }
-        uniq := make([]models.DeviceResult, 0, len(m))
-        for _, v := range m { uniq = append(uniq, v) }
-        sort.Slice(uniq, func(i, j int) bool {
-            return uniq[i].Score > uniq[j].Score
-        })
-        cap := ln.Cap
-        if len(uniq) < cap {
-            cap = len(uniq)
-        }
-        for _, r := range uniq[:cap] {
-            sel[ln.Operator] = append(sel[ln.Operator], r.IP)
-        }
-    }
-    return sel
+	selectedResults := make(map[string]models.LineResult)
+
+	for _, ln := range lines {
+		list, ok := ag[ln.Operator]
+		if !ok {
+			continue
+		}
+
+		var qualified []models.DeviceResult
+		for _, r := range list {
+			// [新增] 质量阈值过滤
+			if r.LatencyMs > th.MaxLatencyMs ||
+				r.DLMbps < th.MinDownloadMbps ||
+				r.LossPct > th.MaxLossPct {
+				continue
+			}
+			
+			// 计算分数
+			score := sc.LatencyWeight*float64(r.LatencyMs) +
+				sc.SpeedWeight*r.DLMbps +
+				sc.JitterWeight*float64(r.JitterMs) +
+				sc.LossWeight*r.LossPct
+			r.Score = score
+			qualified = append(qualified, r)
+		}
+
+		// 去重同 IP & 排序
+		m := make(map[string]models.DeviceResult)
+		for _, r := range qualified {
+			prev, ok := m[r.IP]
+			if !ok || r.Score > prev.Score {
+				m[r.IP] = r
+			}
+		}
+		
+		uniq := make([]models.DeviceResult, 0, len(m))
+		for _, v := range m {
+			uniq = append(uniq, v)
+		}
+		sort.Slice(uniq, func(i, j int) bool {
+			return uniq[i].Score > uniq[j].Score
+		})
+
+		// 分离 Active 和 Candidates
+		var active, candidates []models.SelectedItem
+		cap := ln.Cap
+		for i, r := range uniq {
+			item := models.SelectedItem{
+				IP:           r.IP,
+				SourceDevice: r.Device,
+				Score:        r.Score,
+				LatencyMs:    r.LatencyMs,
+				DLMbps:       r.DLMbps,
+			}
+			if i < cap {
+				active = append(active, item)
+			} else {
+				candidates = append(candidates, item)
+			}
+		}
+
+		selectedResults[ln.Operator] = models.LineResult{
+			Operator:   ln.Operator,
+			Active:     active,
+			Candidates: candidates,
+		}
+	}
+	return selectedResults
 }
