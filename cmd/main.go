@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt" // Add this line
 	"log"
 	"os"
 	"time"
