@@ -35,7 +35,6 @@ func SelectTop(
 			// 计算分数
 			score := sc.LatencyWeight*float64(r.LatencyMs) +
 				sc.SpeedWeight*r.DLMbps +
-				sc.JitterWeight*float64(r.JitterMs) +
 				sc.LossWeight*r.LossPct
 			r.Score = score
 			qualified = append(qualified, r)

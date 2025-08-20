@@ -29,7 +29,6 @@ dns:
 scoring:
   latency_weight: 0.5
   speed_weight:   0.3
-  jitter_weight:  -0.1 # [修改] 负权重
   loss_weight:    -0.1 # [修改] 负权重
 
 # [新增] 筛选阈值 (不满足则过滤)

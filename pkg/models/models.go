@@ -6,15 +6,16 @@ import (
 )
 
 // DeviceResult 设备推送的单条测试记录
+// in cfst-master/pkg/models/models.go
 type DeviceResult struct {
-	Device    string  `json:"device"`
-	Operator  string  `json:"operator"` // ct/cu/cm
-	IP        string  `json:"ip"`
-	LatencyMs int     `json:"latency_ms"`
-	DLMbps    float64 `json:"dl_mbps"`
-	JitterMs  int     `json:"jitter_ms"`
-	LossPct   float64 `json:"loss_pct"`
-	Score     float64 `json:"score"`
+    Device     string  `json:"device"`
+    Operator   string  `json:"operator"`
+    IP         string  `json:"ip"`
+    LatencyMs  int     `json:"latency_ms"`
+    JitterMs   int     `json:"jitter_ms"` // [删除] 移除此行
+    LossPct    float64 `json:"loss_pct"`
+    DLMbps     float64 `json:"dl_mbps"`
+    Score      float64 `json:"score"`
 }
 
 // [修改] SelectedItem 包含 IP 和其来源的详细信息
