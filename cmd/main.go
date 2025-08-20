@@ -15,7 +15,8 @@ import (
 	"controller/pkg/updater"
 )
 
-const stateFilePath = "state.json"
+const configFilePath = "config/config.yml"
+const stateFilePath = "config/state.json"
 
 func UpdateAll(selected map[string]models.LineResult, cfg *config.Config) error {
 	provider := cfg.DNS.Provider
@@ -52,7 +53,7 @@ func UpdateAll(selected map[string]models.LineResult, cfg *config.Config) error 
 
 func main() {
 	// 1. 加载配置
-	cfg, err := config.Load("config.yml")
+	cfg, err := config.Load(configFilePath)
 	if err != nil {
 		log.Fatalf("[error] 加载配置失败: %v", err)
 	}
