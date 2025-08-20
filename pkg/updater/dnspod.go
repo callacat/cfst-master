@@ -4,45 +4,41 @@ import (
 	"bytes"
 	"fmt"
 	"net/http"
-	"strings"
+	// "strings" // Removed unused import
 
 	"controller/pkg/config"
 	"controller/pkg/models"
 )
 
-// UpdateDNSpod 实现了针对 DNSpod 的更新逻辑
+// UpdateDNSpod implements the update logic for DNSpod
 func UpdateDNSpod(line config.Line, ips []string, cfg *config.Config) error {
-	// DNSpod 不支持在单次 API 调用中为同一记录设置多个值, 
-	// 所以我们需要多次调用, 或者使用 "Record.Modify" 的 "multi_value" 模式 (如果套餐支持)
-	// 这里简化为多次调用
+	// DNSpod does not support setting multiple values for the same record in a single API call,
+	// so we need to call it multiple times, or use the "multi_value" mode (if the plan supports it).
+	// We'll simplify here by calling Modify for each IP value.
 	url := "https://dnsapi.cn/Record.Modify"
 
-	// 为了原子性, 我们需要先删除旧的, 再添加新的。
-	// 但 DNSpod API 的限制使得 "先加后减" 更复杂。
-	// 这里采用一种简化的方法：为每个 IP 值调用一次 Modify。
-	// 注意：这并非严格的原子替换，但在多数场景下可用。
-
+	// Note: This is not a strictly atomic replacement, but it's functional for most scenarios.
 	for _, ip := range ips {
-		// 这里假设每个线路只管理一个子域名记录
+		// This assumes each line manages a single subdomain record.
 		form := fmt.Sprintf(
 			"login_token=%s&format=json&domain_id=%s&record_id=%s"+
 				"&sub_domain=%s&record_line_id=%s&record_type=A&value=%s&ttl=%d",
-			cfg.Gist.Token, // 实际应为 cfg.DNSpod.Token
-			cfg.DNS.Domain,    // domain_id, 非 domain name
+			cfg.Gist.Token, // Should ideally be cfg.DNSPod.Token
+			cfg.DNS.Domain,    // domain_id, not domain name
 			line.RecordsetID,
 			cfg.DNS.Subdomain,
-			"0", // 默认线路
+			"0", // Default line
 			ip,
 			cfg.DNS.TTL,
 		)
 
-		// 注意：生产环境需要一个更健壮的 HTTP client
+		// A more robust HTTP client should be used in production.
 		_, err := http.Post(url,
 			"application/x-www-form-urlencoded",
 			bytes.NewBufferString(form))
 
 		if err != nil {
-			// 在实际应用中, 你可能需要处理部分失败的情况
+			// In a real application, you might need to handle partial failures.
 			return fmt.Errorf("failed to update record for IP %s: %w", ip, err)
 		}
 	}
@@ -50,7 +46,7 @@ func UpdateDNSpod(line config.Line, ips []string, cfg *config.Config) error {
 	return nil
 }
 
-// [修改] UpdateAll 移至 main.go, 这里只提供 provider 实现
+// updateAll has been moved to main.go, this file only provides the provider implementation.
 func updateAll(sel map[string][]models.SelectedItem, cfg *config.Config) error {
     if cfg.DNS.Provider == "dnspod" {
         for _, ln := range cfg.DNS.Lines {
