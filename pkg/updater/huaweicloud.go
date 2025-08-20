@@ -10,7 +10,7 @@ import (
 	"github.com/huaweicloud/huaweicloud-sdk-go-v3/core/auth/basic"
 	"github.com/huaweicloud/huaweicloud-sdk-go-v3/core/region"
 	dns "github.com/huaweicloud/huaweicloud-sdk-go-v3/services/dns/v2"
-	"github.comcom/huaweicloud/huaweicloud-sdk-go-v3/services/dns/v2/model"
+	"github.com/huaweicloud/huaweicloud-sdk-go-v3/services/dns/v2/model"
 )
 
 // newHuaweiDNSClient creates a Huawei Cloud DNS client
