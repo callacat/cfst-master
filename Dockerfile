@@ -9,7 +9,8 @@ RUN CGO_ENABLED=0 GOOS=linux go build -a -o multi-net-controller ./cmd/main.go
 
 # 2. 运行阶段
 FROM alpine
-RUN apk add --no-cache ca-certificates
+RUN apk add --no-cache ca-certificates tzdata
+ENV TZ=Asia/Shanghai
 
 # [修改] 将工作目录设置为 /app
 WORKDIR /app
