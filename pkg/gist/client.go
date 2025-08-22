@@ -39,7 +39,6 @@ func NewClient(token, proxyPrefix string) *Client {
 	}
 }
 
-// [修改] 增加重试逻辑
 func (c *Client) doRequestWithRetry(req *http.Request, maxRetries int) (*http.Response, error) {
 	var err error
 	var resp *http.Response
@@ -48,7 +47,19 @@ func (c *Client) doRequestWithRetry(req *http.Request, maxRetries int) (*http.Re
 		if err == nil && resp.StatusCode < 500 {
 			return resp, nil
 		}
-		log.Printf("[warn] Request to %s failed (attempt %d/%d): %v, status: %s", req.URL, i+1, maxRetries, err, resp.Status)
+
+		// [修复] 增加对 resp 是否为 nil 的检查
+		status := "N/A"
+		if resp != nil {
+			status = resp.Status
+		}
+		log.Printf("[warn] Request to %s failed (attempt %d/%d): %v, status: %s", req.URL, i+1, maxRetries, err, status)
+
+		// [修复] 如果 resp 不为 nil，需要关闭它以防资源泄露
+		if resp != nil {
+			resp.Body.Close()
+		}
+
 		time.Sleep(time.Second * time.Duration(2*i)) // Exponential backoff
 	}
 	return resp, err
