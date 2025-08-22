@@ -3,12 +3,16 @@ package updater
 import (
 	"fmt"
 	"log"
+
 	"controller/pkg/config"
-	// ... other imports
+	// [新增] 下面是修复错误所需的 import 语句
+	"github.com/huaweicloud/huaweicloud-sdk-go-v3/core/auth/basic"
+	"github.com/huaweicloud/huaweicloud-sdk-go-v3/core/region"
+	dns "github.com/huaweicloud/huaweicloud-sdk-go-v3/services/dns/v2"
 	"github.com/huaweicloud/huaweicloud-sdk-go-v3/services/dns/v2/model"
 )
 
-// newHuaweiDNSClient creates a Huawei Cloud DNS client
+// newHuaweiDNSClient 创建一个华为云 DNS 客户端
 func newHuaweiDNSClient(cfg *config.Config) (*dns.DnsClient, error) {
 	auth := basic.NewCredentialsBuilder().
 		WithAk(cfg.Huawei.AccessKey).
@@ -27,7 +31,7 @@ func newHuaweiDNSClient(cfg *config.Config) (*dns.DnsClient, error) {
 	return client, nil
 }
 
-// UpdateHuaweiCloud calls the Huawei Cloud DNS API to update records
+// UpdateHuaweiCloud 调用华为云 DNS API 更新记录
 func UpdateHuaweiCloud(recordsetID string, ips []string, cfg *config.Config) error {
 	client, err := newHuaweiDNSClient(cfg)
 	if err != nil {
@@ -35,9 +39,9 @@ func UpdateHuaweiCloud(recordsetID string, ips []string, cfg *config.Config) err
 	}
 
 	ttl := int32(cfg.DNS.TTL)
-	
+
 	updateReq := &model.UpdateRecordSetRequest{
-		RecordsetId: recordsetID, // [修改] 使用传入的 recordsetID
+		RecordsetId: recordsetID,
 		Body: &model.UpdateRecordSetReq{
 			Ttl:     &ttl,
 			Records: &ips,
