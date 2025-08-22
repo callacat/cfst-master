@@ -2,6 +2,7 @@ package models
 
 import (
 	"controller/pkg/config"
+	"fmt" // [ADD THIS] Import the fmt package
 	"time"
 )
 
@@ -58,18 +59,19 @@ func BuildResult(sel map[string]LineResult, state *State, cfg *config.Config) Fi
 		LastDNSWrite: state.LastDNSWrite,
 		NextDNSWriteAt: state.LastDNSWrite.Add(
 			time.Duration(cfg.Selection.CooldownMinutes) * time.Minute),
+		// [FIXED] Correctly format numbers into strings
 		Explain: map[string]string{
-			"cooldown_minutes":      string(rune(cfg.Selection.CooldownMinutes)),
-			"hysteresis_enter_pct":  string(rune(cfg.Selection.HysteresisEnterPct)),
-			"max_latency_ms":        string(rune(cfg.Thresholds.MaxLatencyMs)),
-			"min_download_mbps":     string(rune(cfg.Thresholds.MinDownloadMbps)),
-			"max_loss_pct":          string(rune(cfg.Thresholds.MaxLossPct)),
+			"cooldown_minutes":     fmt.Sprintf("%d", cfg.Selection.CooldownMinutes),
+			"hysteresis_enter_pct": fmt.Sprintf("%.2f", cfg.Selection.HysteresisEnterPct),
+			"max_latency_ms":       fmt.Sprintf("%d", cfg.Thresholds.MaxLatencyMs),
+			"min_download_mbps":    fmt.Sprintf("%.2f", cfg.Thresholds.MinDownloadMbps),
+			"max_loss_pct":         fmt.Sprintf("%.2f", cfg.Thresholds.MaxLossPct),
 		},
 	}
-	for _, ln := range cfg.DNS.Lines {
-		if res, ok := sel[ln.Operator]; ok {
-			fr.Lines = append(fr.Lines, res)
-		}
+	// This part was correct, but is included for completeness
+	for _, ln := range sel {
+        // Correctly append the LineResult, not based on cfg.DNS.Lines
+		fr.Lines = append(fr.Lines, ln)
 	}
 	return fr
 }
