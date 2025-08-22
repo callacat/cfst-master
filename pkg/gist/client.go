@@ -14,6 +14,9 @@ import (
 	"controller/pkg/models"
 )
 
+// [新增] 定义一个标准的浏览器 User-Agent
+const browserUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
+
 type Client struct {
 	token       string
 	proxyPrefix string
@@ -31,6 +34,9 @@ func NewClient(token, proxyPrefix string) *Client {
 }
 
 func (c *Client) doRequestWithRetry(req *http.Request, maxRetries int) (*http.Response, error) {
+	// [修改] 为所有请求设置 User-Agent
+	req.Header.Set("User-Agent", browserUserAgent)
+	
 	var err error
 	var resp *http.Response
 	for i := 0; i < maxRetries; i++ {
@@ -81,21 +87,20 @@ func (c *Client) FetchDeviceResults(gistID string, maxAgeHours int) ([]models.De
 		log.Printf("[info]     Gist %s is too old (updated at %v), skipping.", gistID, gist.UpdatedAt)
 		return nil, nil
 	}
-
 	var allResults []models.DeviceResult
-	// [修改] 更新正则表达式以匹配 "results-" 和 "results6-"
 	re := regexp.MustCompile(`results6?-(ct|cu|cm)-.*-(v4|v6)\.json`)
 
 	log.Printf("[info]     Found %d file(s) in Gist %s. Processing them now...", len(gist.Files), gistID)
 	for _, file := range gist.Files {
 		matches := re.FindStringSubmatch(strings.ToLower(file.Filename))
 		if len(matches) != 3 {
-			log.Printf("[info]     - Skipping file '%s' as it does not match required name format (results- or results6-).", file.Filename)
+			log.Printf("[info]     - Skipping file '%s' as it does not match required name format.", file.Filename)
 			continue
 		}
 		log.Printf("[info]     + Processing matching file: %s", file.Filename)
 		operator, ipVersion := matches[1], matches[2]
 
+		// 注意：这里的 NewRequest 创建的 req 会在 doRequestWithRetry 中被设置 User-Agent
 		req, _ = http.NewRequest("GET", c.buildURL(file.RawURL), nil)
 		dataResp, err := c.doRequestWithRetry(req, 3)
 		if err != nil || dataResp == nil {
@@ -107,7 +112,14 @@ func (c *Client) FetchDeviceResults(gistID string, maxAgeHours int) ([]models.De
 		body, _ := io.ReadAll(dataResp.Body)
 		var drs []models.DeviceResult
 		if err := json.Unmarshal(body, &drs); err != nil {
-			log.Printf("[warn]       Failed to unmarshal content from %s. Skipping file. Error: %v", file.Filename, err)
+			log.Printf("[warn]       Failed to unmarshal content from %s. Error: %v", file.Filename, err)
+			// 仍然保留调试日志，以防万一
+			bodyStr := string(body)
+			debugContent := bodyStr
+			if len(bodyStr) > 500 {
+				debugContent = bodyStr[:500]
+			}
+			log.Printf("[debug]      Received unexpected content for %s:\n--BEGIN--\n%s\n---END---", file.Filename, debugContent)
 			continue
 		}
 		
@@ -122,7 +134,6 @@ func (c *Client) FetchDeviceResults(gistID string, maxAgeHours int) ([]models.De
 	return allResults, nil
 }
 
-// ... (CreateOrUpdateResultGist and buildURL functions remain the same) ...
 func (c *Client) CreateOrUpdateResultGist(gistID string, fr models.FinalResult) (string, error) {
 	content, _ := json.MarshalIndent(fr, "", "  ")
 	bodyMap := map[string]interface{}{
