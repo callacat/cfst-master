@@ -2,6 +2,8 @@ package models
 
 import (
 	"controller/pkg/config"
+	"fmt" // <-- THIS LINE FIXES THE ERROR
+	"strconv" // [ADD THIS] A better way to convert numbers
 	"time"
 )
 
@@ -14,7 +16,7 @@ type DeviceResult struct {
 	LossPct    float64 `json:"loss_pct"`
 	DLMbps     float64 `json:"dl_mbps"`
 	Score      float64 `json:"score"`
-	IPVersion  string  `json:"-"` // 由文件名解析，不参与JSON解析
+	IPVersion  string  `json:"-"`
 }
 
 // SelectedItem 包含 IP 和其来源的详细信息
@@ -58,18 +60,17 @@ func BuildResult(sel map[string]LineResult, state *State, cfg *config.Config) Fi
 		LastDNSWrite: state.LastDNSWrite,
 		NextDNSWriteAt: state.LastDNSWrite.Add(
 			time.Duration(cfg.Selection.CooldownMinutes) * time.Minute),
-		// [FIXED] Correctly format numbers into strings
+		// [IMPROVED] Use strconv for cleaner number to string conversion
 		Explain: map[string]string{
-			"cooldown_minutes":     fmt.Sprintf("%d", cfg.Selection.CooldownMinutes),
+			"cooldown_minutes":     strconv.Itoa(cfg.Selection.CooldownMinutes),
 			"hysteresis_enter_pct": fmt.Sprintf("%.2f", cfg.Selection.HysteresisEnterPct),
-			"max_latency_ms":       fmt.Sprintf("%d", cfg.Thresholds.MaxLatencyMs),
+			"max_latency_ms":       strconv.Itoa(cfg.Thresholds.MaxLatencyMs),
 			"min_download_mbps":    fmt.Sprintf("%.2f", cfg.Thresholds.MinDownloadMbps),
 			"max_loss_pct":         fmt.Sprintf("%.2f", cfg.Thresholds.MaxLossPct),
 		},
 	}
-	// This part was correct, but is included for completeness
+	
 	for _, ln := range sel {
-        // Correctly append the LineResult, not based on cfg.DNS.Lines
 		fr.Lines = append(fr.Lines, ln)
 	}
 	return fr
