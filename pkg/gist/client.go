@@ -14,7 +14,6 @@ import (
 	"controller/pkg/models"
 )
 
-// ... Client struct, NewClient, doRequestWithRetry, buildURL (无变化) ...
 type Client struct {
 	token       string
 	proxyPrefix string
@@ -52,8 +51,6 @@ func (c *Client) doRequestWithRetry(req *http.Request, maxRetries int) (*http.Re
 	return resp, err
 }
 
-
-// [修改] 重构 FetchDeviceResults，增加日志并修复 Bug
 func (c *Client) FetchDeviceResults(gistID string, maxAgeHours int) ([]models.DeviceResult, error) {
 	log.Printf("[info] ---> Fetching data from Gist ID: %s", gistID)
 	url := c.buildURL("https://api.github.com/gists/" + gistID)
@@ -61,13 +58,12 @@ func (c *Client) FetchDeviceResults(gistID string, maxAgeHours int) ([]models.De
 	req.Header.Set("Authorization", "token "+c.token)
 
 	resp, err := c.doRequestWithRetry(req, 3)
-	// [修复] 检查 resp 和 err，防止 nil pointer panic
 	if err != nil {
-		log.Printf("[error] Failed to fetch Gist %s after retries: %v", gistID, err)
+		log.Printf("[error] Failed to fetch Gist %s after all retries: %v", gistID, err)
 		return nil, err
 	}
 	if resp == nil {
-		log.Printf("[error] Received nil response for Gist %s after retries", gistID)
+		log.Printf("[error] Received a nil response for Gist %s after all retries.", gistID)
 		return nil, fmt.Errorf("received nil response for Gist %s", gistID)
 	}
 	defer resp.Body.Close()
@@ -82,25 +78,28 @@ func (c *Client) FetchDeviceResults(gistID string, maxAgeHours int) ([]models.De
 	}
 
 	if maxAgeHours > 0 && time.Since(gist.UpdatedAt) > time.Duration(maxAgeHours)*time.Hour {
-		log.Printf("[info] Gist %s is too old (updated at %v), skipping.", gistID, gist.UpdatedAt)
+		log.Printf("[info]     Gist %s is too old (updated at %v), skipping.", gistID, gist.UpdatedAt)
 		return nil, nil
 	}
 
 	var allResults []models.DeviceResult
-	re := regexp.MustCompile(`results-(ct|cu|cm)-.*-(v4|v6)\.json`)
+	// [修改] 更新正则表达式以匹配 "results-" 和 "results6-"
+	re := regexp.MustCompile(`results6?-(ct|cu|cm)-.*-(v4|v6)\.json`)
 
+	log.Printf("[info]     Found %d file(s) in Gist %s. Processing them now...", len(gist.Files), gistID)
 	for _, file := range gist.Files {
-		log.Printf("[info]     Processing file: %s", file.Filename)
 		matches := re.FindStringSubmatch(strings.ToLower(file.Filename))
 		if len(matches) != 3 {
+			log.Printf("[info]     - Skipping file '%s' as it does not match required name format (results- or results6-).", file.Filename)
 			continue
 		}
+		log.Printf("[info]     + Processing matching file: %s", file.Filename)
 		operator, ipVersion := matches[1], matches[2]
 
 		req, _ = http.NewRequest("GET", c.buildURL(file.RawURL), nil)
 		dataResp, err := c.doRequestWithRetry(req, 3)
 		if err != nil || dataResp == nil {
-			log.Printf("[warn]     Failed to download content from %s. Skipping file.", file.RawURL)
+			log.Printf("[warn]       Failed to download content from %s. Skipping file.", file.RawURL)
 			continue
 		}
 		defer dataResp.Body.Close()
@@ -108,7 +107,7 @@ func (c *Client) FetchDeviceResults(gistID string, maxAgeHours int) ([]models.De
 		body, _ := io.ReadAll(dataResp.Body)
 		var drs []models.DeviceResult
 		if err := json.Unmarshal(body, &drs); err != nil {
-			log.Printf("[warn]     Failed to unmarshal content from %s. Skipping file.", file.Filename)
+			log.Printf("[warn]       Failed to unmarshal content from %s. Skipping file. Error: %v", file.Filename, err)
 			continue
 		}
 		
@@ -117,13 +116,13 @@ func (c *Client) FetchDeviceResults(gistID string, maxAgeHours int) ([]models.De
 			drs[i].IPVersion = ipVersion
 		}
 		allResults = append(allResults, drs...)
-		log.Printf("[info]     Successfully processed file %s, found %d results.", file.Filename, len(drs))
+		log.Printf("[info]       Successfully processed file %s, found %d valid results.", file.Filename, len(drs))
 	}
-	log.Printf("[info] <--- Finished fetching Gist %s, total results found: %d", gistID, len(allResults))
+	log.Printf("[info] <--- Finished fetching Gist %s, total valid results gathered: %d", gistID, len(allResults))
 	return allResults, nil
 }
 
-
+// ... (CreateOrUpdateResultGist and buildURL functions remain the same) ...
 func (c *Client) CreateOrUpdateResultGist(gistID string, fr models.FinalResult) (string, error) {
 	content, _ := json.MarshalIndent(fr, "", "  ")
 	bodyMap := map[string]interface{}{
@@ -152,8 +151,8 @@ func (c *Client) CreateOrUpdateResultGist(gistID string, fr models.FinalResult) 
 
 	resp, err := c.doRequestWithRetry(req, 3)
 	if err != nil || resp == nil {
-		log.Printf("[error] Failed to create/update result Gist")
-		return "", fmt.Errorf("failed to create/update result Gist")
+		log.Printf("[error] Failed to create/update result Gist after retries.")
+		return "", fmt.Errorf("failed to create/update result Gist after retries: %v", err)
 	}
 	defer resp.Body.Close()
 	

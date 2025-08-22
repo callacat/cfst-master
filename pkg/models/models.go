@@ -7,18 +7,17 @@ import (
 
 // DeviceResult 设备推送的单条测试记录
 type DeviceResult struct {
-    Device     string  `json:"device"`
-    Operator   string  `json:"operator"` // 将由文件名填充
-    IP         string  `json:"ip"`
-    IPVersion  string  `json:"-"` // [新增] 用于存储 'v4' 或 'v6'，json解析时忽略
-    LatencyMs  int     `json:"latency_ms"`
-    JitterMs   int     `json:"jitter_ms"` // [删除] 此行已在您的代码中移除
-    LossPct    float64 `json:"loss_pct"`
-    DLMbps     float64 `json:"dl_mbps"`
-    Score      float64 `json:"score"`
+	Device     string  `json:"device"`
+	Operator   string  `json:"operator"`
+	IP         string  `json:"ip"`
+	LatencyMs  int     `json:"latency_ms"`
+	LossPct    float64 `json:"loss_pct"`
+	DLMbps     float64 `json:"dl_mbps"`
+	Score      float64 `json:"score"`
+	IPVersion  string  `json:"-"` // 由文件名解析，不参与JSON解析
 }
 
-// [修改] SelectedItem 包含 IP 和其来源的详细信息
+// SelectedItem 包含 IP 和其来源的详细信息
 type SelectedItem struct {
 	IP           string  `json:"ip"`
 	SourceDevice string  `json:"source_device"`
@@ -27,14 +26,14 @@ type SelectedItem struct {
 	DLMbps       float64 `json:"dl_mbps"`
 }
 
-// [修改] LineResult 包含 active 和 candidates 列表
+// LineResult 包含 active 和 candidates 列表
 type LineResult struct {
 	Operator   string         `json:"operator"`
 	Active     []SelectedItem `json:"active"`
 	Candidates []SelectedItem `json:"candidates"`
 }
 
-// [修改] FinalResult 写入 Gist 的结构, 增加 Explain 字段
+// FinalResult 写入 Gist 的结构
 type FinalResult struct {
 	Timestamp      time.Time         `json:"timestamp"`
 	Domain         string            `json:"domain"`
@@ -45,7 +44,7 @@ type FinalResult struct {
 	NextDNSWriteAt time.Time         `json:"next_dns_write_at"`
 }
 
-// [新增] State 用于在本地持久化上次的 DNS 更新状态
+// State 用于在本地持久化上次的 DNS 更新状态
 type State struct {
 	LastDNSWrite time.Time `json:"last_dns_write"`
 }
