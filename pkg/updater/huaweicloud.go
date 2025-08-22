@@ -3,13 +3,8 @@ package updater
 import (
 	"fmt"
 	"log"
-
 	"controller/pkg/config"
-	// "controller/pkg/models" // Removed unused import
-
-	"github.com/huaweicloud/huaweicloud-sdk-go-v3/core/auth/basic"
-	"github.com/huaweicloud/huaweicloud-sdk-go-v3/core/region"
-	dns "github.com/huaweicloud/huaweicloud-sdk-go-v3/services/dns/v2"
+	// ... other imports
 	"github.com/huaweicloud/huaweicloud-sdk-go-v3/services/dns/v2/model"
 )
 
@@ -33,29 +28,23 @@ func newHuaweiDNSClient(cfg *config.Config) (*dns.DnsClient, error) {
 }
 
 // UpdateHuaweiCloud calls the Huawei Cloud DNS API to update records
-func UpdateHuaweiCloud(line config.Line, ips []string, cfg *config.Config) error {
+func UpdateHuaweiCloud(recordsetID string, ips []string, cfg *config.Config) error {
 	client, err := newHuaweiDNSClient(cfg)
 	if err != nil {
 		return fmt.Errorf("failed to create Huawei Cloud client: %w", err)
 	}
 
-	// This assumes the zone_id is globally unique and doesn't need to be specified.
-	// In a real-world scenario, you might need to query for the zone_id first.
-	// For simplicity, we'll proceed assuming the recordset_id is sufficient.
-
 	ttl := int32(cfg.DNS.TTL)
 	
-	// [FIX] Corrected the structure and types for the update request
 	updateReq := &model.UpdateRecordSetRequest{
-		RecordsetId: line.RecordsetID,
+		RecordsetId: recordsetID, // [修改] 使用传入的 recordsetID
 		Body: &model.UpdateRecordSetReq{
 			Ttl:     &ttl,
-			Records: &ips, // Pass the address of the slice
+			Records: &ips,
 		},
-		// ZoneId: "your_zone_id", // This may be required depending on your setup
 	}
 
-	log.Printf("[info] Updating Huawei Cloud DNS records for line %s: %v", line.Operator, ips)
+	log.Printf("[info] Updating Huawei Cloud DNS records for recordset %s: %v", recordsetID, ips)
 	_, err = client.UpdateRecordSet(updateReq)
 	if err != nil {
 		return fmt.Errorf("failed to call Huawei Cloud UpdateRecordSet API: %w", err)
