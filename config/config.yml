@@ -1,51 +1,54 @@
 # GitHub Gist
 gist:
-  token: "${GITHUB_TOKEN}"       # GitHub Personal Access Token (gist 权限)
-  proxy_prefix: ""               # [新增] 全局代理前缀, 如 "https://ghproxy.com/"
-  device_gists:                  # 设备推送的 Gist ID 列表
+  token: "${GITHUB_TOKEN}"
+  proxy_prefix: ""
+  max_result_age_hours: 24
+  device_gists:
     - "aaaabbbbcccc111122223333"
     - "ddddeeeeffff444455556666"
-    - "gggghhhhiiii777788889999"
-  result_gist_id: "xxxxxxx"      # 主控写入结果的 Gist ID，留空则首次创建
+  result_gist_id: "" # 留空则首次创建
 
-# DNS 设置
+# DNS 设置 (仅华为云)
 dns:
-  provider: "dnspod"             # dnspod / huawei
   domain: "example.com"
-  subdomain: "cf"                # cf.example.com
+  subdomain: "cf"
   ttl: 180
   lines:
-    - operator: "ct"             # 电信
-      recordset_id: "12345678"
+    - operator: "ct"
+      a_recordset_id: "12345678"
+      aaaa_recordset_id: "87654321"
       cap: 2
-    - operator: "cu"             # 联通
-      recordset_id: "23456789"
+    - operator: "cu"
+      a_recordset_id: "23456789"
+      aaaa_recordset_id: "98765432"
       cap: 2
-    - operator: "cm"             # 移动
-      recordset_id: "34567890"
+    - operator: "cm"
+      a_recordset_id: "34567890"
+      aaaa_recordset_id: "09876543"
       cap: 2
+
+# 华为云项目 ID 和认证信息
+huawei:
+  enabled: true # 华为云更新开关
+  project_id: "${HUAWEI_PROJECT_ID}"
+  access_key: "${HUAWEI_ACCESS_KEY}"
+  secret_key: "${HUAWEI_SECRET_KEY}"
+  region: "cn-north-4"
 
 # 打分权重
 scoring:
   latency_weight: 0.5
   speed_weight:   0.3
-  loss_weight:    -0.1 # [修改] 负权重
+  loss_weight:    -0.1
 
-# [新增] 筛选阈值 (不满足则过滤)
+# 筛选阈值
 thresholds:
-  max_latency_ms: 80     # 最高延迟 (ms)
-  min_download_mbps: 10  # 最低速度 (Mbps)
-  max_loss_pct: 1.0      # 最高丢包率 (%)
+  max_latency_ms: 80
+  min_download_mbps: 10
+  max_loss_pct: 1.0
 
-# [新增] DNS 更新决策
+# DNS 更新决策
 selection:
-  cooldown_minutes: 30     # 冷却时间 (分钟), 避免频繁更新
-  hysteresis_enter_pct: 10 # 滞回进入门槛 (%), 新 IP 必须比旧的好 10% 才触发更新
-  hysteresis_exit_pct: 5   # 滞回退出门槛 (%), 旧 IP 差 5% 以内不触发更新
-
-# 可选：华为云项目 ID 和认证信息
-huawei:
-  project_id: "${HUAWEI_PROJECT_ID}"
-  access_key: "${HUAWEI_ACCESS_KEY}"   # [新增] 华为云 Access Key
-  secret_key: "${HUAWEI_SECRET_KEY}"   # [新增] 华为云 Secret Key
-  region: "cn-north-4"               # [新增] 华为云区域, e.g., "cn-north-4"
+  cooldown_minutes: 30
+  hysteresis_enter_pct: 10
+  hysteresis_exit_pct: 5

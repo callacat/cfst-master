@@ -6,11 +6,22 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"time"
+	"regexp" // [新增]
 	"strings"
+	"time"
 
 	"controller/pkg/models"
 )
+
+type GistFile struct {
+	Filename string    `json:"filename"`
+	RawURL   string    `json:"raw_url"`
+}
+
+type Gist struct {
+	Files     map[string]GistFile `json:"files"`
+	UpdatedAt time.Time           `json:"updated_at"`
+}
 
 type Client struct {
 	token       string
@@ -44,7 +55,7 @@ func (c *Client) doRequestWithRetry(req *http.Request, maxRetries int) (*http.Re
 }
 
 // [修改] 应用代理和重试
-func (c *Client) FetchDeviceResults(gistID string) ([]models.DeviceResult, error) {
+func (c *Client) FetchDeviceResults(gistID string, maxAgeHours int) ([]models.DeviceResult, error) {
 	url := c.buildURL("https://api.github.com/gists/" + gistID)
 	req, _ := http.NewRequest("GET", url, nil)
 	req.Header.Set("Authorization", "token "+c.token)
@@ -55,42 +66,58 @@ func (c *Client) FetchDeviceResults(gistID string) ([]models.DeviceResult, error
 	}
 	defer resp.Body.Close()
 
-	var gist struct {
-		Files map[string]struct {
-			RawURL string `json:"raw_url"`
-		} `json:"files"`
-	}
+	var gist Gist
 	if err := json.NewDecoder(resp.Body).Decode(&gist); err != nil {
 		return nil, err
 	}
 
-	// 查找第一个 JSON 文件
-	var rawURL string
-	for _, file := range gist.Files {
-		if strings.HasSuffix(strings.ToLower(file.RawURL), ".json") {
-			rawURL = c.buildURL(file.RawURL)
-			break
-		}
+	// [新增] 需求2: 过滤超过指定时间的 Gist
+	if maxAgeHours > 0 && time.Since(gist.UpdatedAt) > time.Duration(maxAgeHours)*time.Hour {
+		log.Printf("[info] Gist %s is too old (updated at %v), skipping.", gistID, gist.UpdatedAt)
+		return nil, nil // 返回空，表示正常跳过
 	}
-	if rawURL == "" {
-		return nil, nil // No JSON file found
-	}
-	
-	req, _ = http.NewRequest("GET", rawURL, nil)
-	data, err := c.doRequestWithRetry(req, 3)
-	if err != nil {
-		return nil, err
-	}
-	defer data.Body.Close()
-	
-	body, _ := io.ReadAll(data.Body)
-	var drs []models.DeviceResult
-	if err := json.Unmarshal(body, &drs); err != nil {
-		return nil, err
-	}
-	return drs, nil
-}
 
+	var allResults []models.DeviceResult
+	// [新增] 正则表达式用于解析文件名, e.g., "results-cu-my-home-lt-v4.json"
+	re := regexp.MustCompile(`results-(ct|cu|cm)-.*-(v4|v6)\.json`)
+
+	// [修改] 遍历 Gist 中的所有文件
+	for _, file := range gist.Files {
+		matches := re.FindStringSubmatch(strings.ToLower(file.Filename))
+		if len(matches) != 3 {
+			log.Printf("[warn] Filename '%s' in Gist %s does not match expected format, skipping.", file.Filename, gistID)
+			continue
+		}
+
+		operator := matches[1]  // e.g., "cu"
+		ipVersion := matches[2] // e.g., "v4"
+
+		// 下载文件内容
+		req, _ = http.NewRequest("GET", c.buildURL(file.RawURL), nil)
+		dataResp, err := c.doRequestWithRetry(req, 3)
+		if err != nil {
+			log.Printf("[warn] Failed to download file %s: %v", file.RawURL, err)
+			continue
+		}
+		defer dataResp.Body.Close()
+
+		body, _ := io.ReadAll(dataResp.Body)
+		var drs []models.DeviceResult
+		if err := json.Unmarshal(body, &drs); err != nil {
+			log.Printf("[warn] Failed to unmarshal content from %s: %v", file.Filename, err)
+			continue
+		}
+
+		// [核心] 使用从文件名解析出的信息来填充数据
+		for i := range drs {
+			drs[i].Operator = operator
+			drs[i].IPVersion = ipVersion
+		}
+		allResults = append(allResults, drs...)
+	}
+
+	return allResults, nil
+}
 
 // [修改] 应用代理和重试
 func (c *Client) CreateOrUpdateResultGist(gistID string, fr models.FinalResult) (string, error) {

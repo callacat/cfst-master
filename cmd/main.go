@@ -2,9 +2,11 @@ package main
 
 import (
 	"encoding/json"
-	"fmt" // Add this line
+	"flag"
+	"fmt"
 	"log"
 	"os"
+	"strings"
 	"time"
 
 	"controller/pkg/aggregator"
@@ -18,14 +20,43 @@ import (
 const configFilePath = "config/config.yml"
 const stateFilePath = "config/state.json"
 
+// UpdateAll 函数精简为只处理华为云
 func UpdateAll(selected map[string]models.LineResult, cfg *config.Config) error {
-	provider := cfg.DNS.Provider
-	log.Printf("[info] DNS 提供商: %s", provider)
+	if !cfg.Huawei.Enabled {
+		log.Println("[info] Huawei Cloud updates are disabled in the config, skipping.")
+		return nil
+	}
+	log.Println("[info] DNS provider is Huawei Cloud.")
 
-	for _, lineCfg := range cfg.DNS.Lines {
-		lineResult, ok := selected[lineCfg.Operator]
-		if !ok || len(lineResult.Active) == 0 {
-			log.Printf("[info] 线路 %s 无可用 IP，跳过更新", lineCfg.Operator)
+	lineCfgMap := make(map[string]config.Line)
+	for _, lc := range cfg.DNS.Lines {
+		lineCfgMap[lc.Operator] = lc
+	}
+
+	for key, lineResult := range selected {
+		if len(lineResult.Active) == 0 {
+			log.Printf("[info] Line %s has no active IPs, skipping update", key)
+			continue
+		}
+
+		parts := strings.Split(key, "-")
+		operator, ipVersion := parts[0], parts[1]
+
+		lineCfg, ok := lineCfgMap[operator]
+		if !ok {
+			log.Printf("[warn] No DNS line configuration found for operator: %s", operator)
+			continue
+		}
+
+		var recordsetID string
+		if ipVersion == "v4" {
+			recordsetID = lineCfg.ARecordsetID
+		} else if ipVersion == "v6" {
+			recordsetID = lineCfg.AAAARecordsetID
+		}
+
+		if recordsetID == "" {
+			log.Printf("[info] No recordset ID configured for line %s (%s), skipping", key, ipVersion)
 			continue
 		}
 
@@ -34,110 +65,93 @@ func UpdateAll(selected map[string]models.LineResult, cfg *config.Config) error 
 			ips = append(ips, item.IP)
 		}
 
-		var err error
-		switch provider {
-		case "dnspod":
-			err = updater.UpdateDNSpod(lineCfg, ips, cfg)
-		case "huawei":
-			err = updater.UpdateHuaweiCloud(lineCfg, ips, cfg) // [新增] 调用华为云更新
-		default:
-			return fmt.Errorf("不支持的 DNS 提供商: %s", provider)
-		}
-
-		if err != nil {
-			return fmt.Errorf("为线路 %s 更新 DNS 失败: %w", lineCfg.Operator, err)
+		if err := updater.UpdateHuaweiCloud(recordsetID, ips, cfg); err != nil {
+			return fmt.Errorf("failed to update DNS for line %s: %w", key, err)
 		}
 	}
 	return nil
 }
 
 func main() {
-	// 1. 加载配置
+	updateDNS := flag.Bool("update-dns", false, "Set this flag to actually update DNS records")
+	flag.Parse()
+
 	cfg, err := config.Load(configFilePath)
 	if err != nil {
-		log.Fatalf("[error] 加载配置失败: %v", err)
+		log.Fatalf("[error] failed to load config: %v", err)
 	}
 
-	// [新增] 加载上次状态
 	state := loadState()
-
-	// 2. 初始化 Gist 客户端 (传入代理配置)
 	gc := gist.NewClient(cfg.Gist.Token, cfg.Gist.ProxyPrefix)
 
-	// 3. 拉取所有设备结果
 	var allResults []models.DeviceResult
 	for _, gid := range cfg.Gist.DeviceGists {
-		drs, err := gc.FetchDeviceResults(gid)
+		drs, err := gc.FetchDeviceResults(gid, cfg.Gist.MaxResultAgeHours)
 		if err != nil {
-			log.Printf("[warn] 获取 Gist %s 失败: %v", gid, err)
+			log.Printf("[warn] failed to fetch Gist %s: %v", gid, err)
 			continue
 		}
 		allResults = append(allResults, drs...)
 	}
 	if len(allResults) == 0 {
-		log.Fatal("[error] 未获取到任何设备结果，退出")
+		log.Fatal("[error] No device results found, exiting")
 	}
 
-	// 4. 聚合打分
 	ag := aggregator.Aggregate(allResults)
-
-	// 5. 按线路筛选 Top IP (传入阈值)
 	selected := selector.SelectTop(ag, cfg.DNS.Lines, cfg.Scoring, cfg.Thresholds)
 
-	// [新增] 6. 检查是否需要更新 DNS (冷却期和滞回判断)
-	if shouldUpdateDNS(state, cfg) {
-		log.Println("[info] 触发 DNS 更新...")
-		if err := UpdateAll(selected, cfg); err != nil { // [修改]
-			log.Fatalf("[error] 更新 DNS 失败: %v", err)
+	if *updateDNS {
+		log.Println("[info] '--update-dns' flag is set, proceeding with DNS update check.")
+		if shouldUpdateDNS(state, cfg) {
+			log.Println("[info] Triggering DNS update...")
+			if err := UpdateAll(selected, cfg); err != nil {
+				log.Fatalf("[error] Failed to update DNS: %v", err)
+			}
+			log.Println("[info] DNS update process finished.")
+			state.LastDNSWrite = time.Now()
+			saveState(state)
+		} else {
+			log.Println("[info] DNS update not required (in cooldown or no better IPs).")
 		}
-		log.Println("[info] DNS 更新完成")
-		state.LastDNSWrite = time.Now()
-		saveState(state)
 	} else {
-		log.Println("[info] 无需更新 DNS (冷却中或无更优 IP)")
+		log.Println("[info] '--update-dns' flag not set. Skipping DNS update.")
 	}
 
-	// 7. 生成结果模型并写入/更新 Gist
 	result := models.BuildResult(selected, state, cfg)
 	outGistID, err := gc.CreateOrUpdateResultGist(cfg.Gist.ResultGistID, result)
 	if err != nil {
-		log.Fatalf("[error] 推送结果 Gist 失败: %v", err)
+		log.Fatalf("[error] Failed to push result Gist: %v", err)
 	}
-	log.Println("[info] 结果已写入 Gist:", outGistID)
-
-	log.Println("[info] 本次调度完成")
+	log.Println("[info] Result has been written to Gist:", outGistID)
+	log.Println("[info] Current run finished.")
 }
 
-// [新增]
+
+// loadState, saveState, shouldUpdateDNS functions remain unchanged
 func loadState() *models.State {
 	data, err := os.ReadFile(stateFilePath)
 	if err != nil {
-		log.Println("[warn] 状态文件不存在, 将创建新的状态")
+		log.Println("[warn] state file not found, creating new state")
 		return &models.State{}
 	}
 	var state models.State
 	if err := json.Unmarshal(data, &state); err != nil {
-		log.Fatalf("[error] 解析状态文件失败: %v", err)
+		log.Fatalf("[error] failed to parse state file: %v", err)
 	}
 	return &state
 }
 
-// [新增]
 func saveState(state *models.State) {
 	data, _ := json.MarshalIndent(state, "", "  ")
 	if err := os.WriteFile(stateFilePath, data, 0644); err != nil {
-		log.Printf("[warn] 保存状态文件失败: %v", err)
+		log.Printf("[warn] failed to save state file: %v", err)
 	}
 }
 
-// [新增]
 func shouldUpdateDNS(state *models.State, cfg *config.Config) bool {
-	// 检查冷却期
 	if time.Since(state.LastDNSWrite) < time.Duration(cfg.Selection.CooldownMinutes)*time.Minute {
 		return false
 	}
-	// TODO: 在这里实现更复杂的滞回逻辑,
-	// 例如比较 `selected` 的 IP 与上次 Gist 中的 `active` IP 的平均分数。
-	// 为简化, 此处仅实现了冷却期判断。
+	// TODO: Implement hysteresis logic here.
 	return true
 }

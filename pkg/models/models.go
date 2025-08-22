@@ -6,13 +6,13 @@ import (
 )
 
 // DeviceResult 设备推送的单条测试记录
-// in cfst-master/pkg/models/models.go
 type DeviceResult struct {
     Device     string  `json:"device"`
-    Operator   string  `json:"operator"`
+    Operator   string  `json:"operator"` // 将由文件名填充
     IP         string  `json:"ip"`
+    IPVersion  string  `json:"-"` // [新增] 用于存储 'v4' 或 'v6'，json解析时忽略
     LatencyMs  int     `json:"latency_ms"`
-    JitterMs   int     `json:"jitter_ms"` // [删除] 移除此行
+    JitterMs   int     `json:"jitter_ms"` // [删除] 此行已在您的代码中移除
     LossPct    float64 `json:"loss_pct"`
     DLMbps     float64 `json:"dl_mbps"`
     Score      float64 `json:"score"`
