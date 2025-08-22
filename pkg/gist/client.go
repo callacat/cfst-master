@@ -56,56 +56,52 @@ func (c *Client) doRequestWithRetry(req *http.Request, maxRetries int) (*http.Re
 
 func (c *Client) FetchDeviceResults(gistID string, maxAgeHours int) ([]models.DeviceResult, error) {
 	log.Printf("[info] ---> Fetching data from Gist ID: %s", gistID)
-	// [MODIFIED] Add logging for the initial API request URL
 	apiRequestURL := c.buildURL("https://api.github.com/gists/" + gistID)
 	log.Printf("[debug]      Requesting Gist metadata from: %s", apiRequestURL)
 	req, _ := http.NewRequest("GET", apiRequestURL, nil)
 	req.Header.Set("Authorization", "token "+c.token)
 
 	resp, err := c.doRequestWithRetry(req, 3)
-	if err != nil {
-		log.Printf("[error] Failed to fetch Gist metadata for %s after all retries: %v", gistID, err)
-		return nil, err
-	}
-	if resp == nil {
-		log.Printf("[error] Received a nil response for Gist metadata for %s after all retries.", gistID)
-		return nil, fmt.Errorf("received nil response for Gist metadata for %s", gistID)
+	if err != nil || resp == nil {
+		log.Printf("[error] Failed to fetch Gist metadata for %s after retries", gistID)
+		return nil, fmt.Errorf("failed to fetch Gist metadata")
 	}
 	defer resp.Body.Close()
-
-	var gist struct {
-		Files     map[string]struct{ Filename, RawURL string } `json:"files"`
-		UpdatedAt time.Time `json:"updated_at"`
-	}
-
-	// [MODIFIED] Read body first for debugging, then decode
+	
 	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
 		log.Printf("[error] Failed to read Gist metadata response body for %s: %v", gistID, err)
 		return nil, err
 	}
 
-	if err := json.Unmarshal(bodyBytes, &gist); err != nil {
-		log.Printf("[error] Failed to decode Gist JSON for %s: %v", gistID, err)
-		// Debug the raw response if it fails
-		debugContent := string(bodyBytes)
-		if len(debugContent) > 500 {
-			debugContent = debugContent[:500]
-		}
-		log.Printf("[debug]      Received unexpected metadata content:\n--BEGIN--\n%s\n---END---", debugContent)
-		return nil, err
+	// [CRITICAL FIX] Correct the struct definition for JSON parsing
+	var gist struct {
+		Files map[string]struct {
+			Filename string `json:"filename"`
+			RawURL   string `json:"raw_url"`
+		} `json:"files"`
+		UpdatedAt time.Time `json:"updated_at"`
 	}
 
-
+	if err := json.Unmarshal(bodyBytes, &gist); err != nil {
+		log.Printf("[error] Failed to decode Gist JSON for %s: %v", gistID, err)
+		return nil, err
+	}
+	
 	if maxAgeHours > 0 && time.Since(gist.UpdatedAt) > time.Duration(maxAgeHours)*time.Hour {
 		log.Printf("[info]     Gist %s is too old (updated at %v), skipping.", gistID, gist.UpdatedAt)
 		return nil, nil
 	}
+	
 	var allResults []models.DeviceResult
 	re := regexp.MustCompile(`results6?-(ct|cu|cm)-.*-(v4|v6)\.json`)
 
 	log.Printf("[info]     Found %d file(s) in Gist %s. Processing them now...", len(gist.Files), gistID)
 	for _, file := range gist.Files {
+		if file.RawURL == "" {
+			log.Printf("[warn]       File '%s' was parsed but is missing 'raw_url'. This can happen with a misconfigured proxy. Skipping.", file.Filename)
+			continue
+		}
 		matches := re.FindStringSubmatch(strings.ToLower(file.Filename))
 		if len(matches) != 3 {
 			continue
@@ -113,14 +109,13 @@ func (c *Client) FetchDeviceResults(gistID string, maxAgeHours int) ([]models.De
 		log.Printf("[info]     + Processing matching file: %s", file.Filename)
 		operator, ipVersion := matches[1], matches[2]
 
-		// [MODIFIED] Add the specific logging you requested
 		finalDownloadURL := c.buildURL(file.RawURL)
 		log.Printf("[debug]      Attempting to download from final URL: %s", finalDownloadURL)
 
 		req, _ = http.NewRequest("GET", finalDownloadURL, nil)
 		dataResp, err := c.doRequestWithRetry(req, 3)
 		if err != nil || dataResp == nil {
-			log.Printf("[warn]       Failed to download content from %s. Skipping file.", file.RawURL)
+			log.Printf("[warn]       Failed to download content. Skipping file.")
 			continue
 		}
 		defer dataResp.Body.Close()
@@ -129,12 +124,6 @@ func (c *Client) FetchDeviceResults(gistID string, maxAgeHours int) ([]models.De
 		var drs []models.DeviceResult
 		if err := json.Unmarshal(body, &drs); err != nil {
 			log.Printf("[warn]       Failed to unmarshal content from %s. Error: %v", file.Filename, err)
-			bodyStr := string(body)
-			debugContent := bodyStr
-			if len(bodyStr) > 500 {
-				debugContent = bodyStr[:500]
-			}
-			log.Printf("[debug]      Received unexpected content for %s:\n--BEGIN--\n%s\n---END---", file.Filename, debugContent)
 			continue
 		}
 		
@@ -149,7 +138,6 @@ func (c *Client) FetchDeviceResults(gistID string, maxAgeHours int) ([]models.De
 	return allResults, nil
 }
 
-// ... (CreateOrUpdateResultGist and buildURL functions are unchanged) ...
 func (c *Client) CreateOrUpdateResultGist(gistID string, fr models.FinalResult) (string, error) {
 	content, _ := json.MarshalIndent(fr, "", "  ")
 	bodyMap := map[string]interface{}{
