@@ -2,7 +2,6 @@ package models
 
 import (
 	"controller/pkg/config"
-	"fmt" // [ADD THIS] Import the fmt package
 	"time"
 )
 
