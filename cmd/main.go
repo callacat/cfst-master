@@ -98,25 +98,36 @@ func main() {
 		}
 	}
 
+	log.Println("========> Starting New Run <========")
+
 	state := loadState()
 	gc := gist.NewClient(cfg.Gist.Token, cfg.Gist.ProxyPrefix)
 
+	log.Println("========> 1. Fetching Device Results <========")
 	var allResults []models.DeviceResult
 	for _, gid := range cfg.Gist.DeviceGists {
 		drs, err := gc.FetchDeviceResults(gid, cfg.Gist.MaxResultAgeHours)
 		if err != nil {
-			log.Printf("[warn] failed to fetch Gist %s: %v", gid, err)
+			log.Printf("[warn] An error occurred while fetching Gist %s: %v", gid, err)
 			continue
 		}
 		allResults = append(allResults, drs...)
 	}
 	if len(allResults) == 0 {
-		log.Fatal("[error] No device results found, exiting")
+		log.Fatal("[error] No valid device results found after checking all Gists. Exiting.")
 	}
+	log.Printf("========> Fetched a total of %d results from all Gists.", len(allResults))
+
+	log.Println("========> 2. Aggregating Results <========")
 	ag := aggregator.Aggregate(allResults)
+	log.Printf("[info] Aggregated results into %d groups (e.g., 'cu-v4').", len(ag))
+
+	log.Println("========> 3. Selecting Top IPs <========")
 	selected := selector.SelectTop(ag, cfg.DNS.Lines, cfg.Scoring, cfg.Thresholds)
-    if *updateDNS {
-		log.Println("[info] '--update-dns' flag is set, proceeding with DNS update check.")
+	log.Println("[info] Finished selecting top IPs for each line.")
+
+	if *updateDNS {
+		log.Println("========> 4. Processing DNS Updates <========")
 		if shouldUpdateDNS(state, cfg) {
 			log.Println("[info] Triggering DNS update...")
 			if err := UpdateAll(selected, cfg); err != nil {
@@ -129,8 +140,11 @@ func main() {
 			log.Println("[info] DNS update not required (in cooldown or no better IPs).")
 		}
 	} else {
+		log.Println("========> 4. DNS Update Skipped <========")
 		log.Println("[info] '--update-dns' flag not set. Skipping DNS update.")
 	}
+
+	log.Println("========> 5. Uploading Result Gist <========")
 
 	// 7. 生成结果模型并写入/更新 Gist
 	result := models.BuildResult(selected, state, cfg)
@@ -157,7 +171,7 @@ func main() {
 	}
 
 	log.Println("[info] Result has been written to Gist:", outGistID)
-	log.Println("[info] Current run finished.")
+	log.Println("========> Run Finished Successfully <========")
 }
 
 
