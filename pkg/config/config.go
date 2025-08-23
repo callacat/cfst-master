@@ -26,6 +26,7 @@ type Config struct {
 	} `yaml:"gist"`
 
 	DNS struct {
+		ZoneId    string `yaml:"zone_id"` // [FIX] Added the ZoneId field to match the config file.
 		Domain    string `yaml:"domain"`
 		Subdomain string `yaml:"subdomain"`
 		TTL       int    `yaml:"ttl"`
@@ -35,7 +36,6 @@ type Config struct {
 	Huawei     Huawei     `yaml:"huawei"`
 	Scoring    Scoring    `yaml:"scoring"`
 	Thresholds Thresholds `yaml:"thresholds"`
-	// [已删除] Selection 字段已被移除
 }
 
 type Line struct {
@@ -56,8 +56,6 @@ type Thresholds struct {
 	MinDownloadMbps float64 `yaml:"min_download_mbps"`
 	MaxLossPct      float64 `yaml:"max_loss_pct"`
 }
-
-// [已删除] Selection 结构体已被完全移除
 
 func Load(path string) (*Config, error) {
 	data, err := os.ReadFile(path)
