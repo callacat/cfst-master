@@ -10,32 +10,30 @@ import (
 	coreCfg "github.com/huaweicloud/huaweicloud-sdk-go-v3/core/config"
 	dns "github.com/huaweicloud/huaweicloud-sdk-go-v3/services/dns/v2"
 	"github.com/huaweicloud/huaweicloud-sdk-go-v3/services/dns/v2/model"
-	// [新增] 导入 DNS 服务专属的 region 包
 	dnsRegion "github.com/huaweicloud/huaweicloud-sdk-go-v3/services/dns/v2/region"
 )
 
-// newHuaweiDNSClient 创建一个华为云 DNS 客户端 (修正版)
+// newHuaweiDNSClient creates a configured Huawei Cloud DNS service client.
 func newHuaweiDNSClient(cfg *config.Config) (*dns.DnsClient, error) {
-	// 1. 认证信息
+	// 1. Build authentication credentials
 	auth := basic.NewCredentialsBuilder().
 		WithAk(cfg.Huawei.AccessKey).
 		WithSk(cfg.Huawei.SecretKey).
 		WithProjectId(cfg.Huawei.ProjectID).
 		Build()
 
-	// 2. [修正] 使用 SDK 的 region 功能，而不是手动拼接 Endpoint
-	// 这样可以确保 SDK 自动使用官方、正确的服务地址
+	// 2. Safely build the service region information using the SDK's region functionality.
 	r, err := dnsRegion.SafeValueOf(cfg.Huawei.Region)
 	if err != nil {
-		return nil, fmt.Errorf("invalid or unsupported region specified in config: %s, error: %w", cfg.Huawei.Region, err)
+		return nil, fmt.Errorf("invalid or unsupported region '%s' specified: %w", cfg.Huawei.Region, err)
 	}
 	log.Printf("[debug] Using Huawei Cloud DNS region: %s", cfg.Huawei.Region)
 
-	// 3. 添加 HTTP 配置，设置网络超时
+	// 3. Configure the HTTP client, for example, by setting a timeout.
 	httpConfig := coreCfg.DefaultHttpConfig().
-		WithTimeout(60 * time.Second) // 设置60秒超时
+		WithTimeout(60 * time.Second)
 
-	// 4. 使用 Builder 构建客户端
+	// 4. Use the builder pattern to create the final client instance.
 	client := dns.NewDnsClient(
 		dns.DnsClientBuilder().
 			WithRegion(r).
@@ -46,28 +44,37 @@ func newHuaweiDNSClient(cfg *config.Config) (*dns.DnsClient, error) {
 	return client, nil
 }
 
-// UpdateHuaweiCloud 调用华为云 DNS API 更新记录
+// UpdateHuaweiCloud updates a single DNS record set based on the provided parameters.
+// This function calls Huawei Cloud's "UpdateRecordSet" API (singular), which is the correct
+// method for modifying an existing record set by its unique ID.
 func UpdateHuaweiCloud(recordsetID string, ips []string, cfg *config.Config) error {
+	// Step 1: Initialize the DNS client
 	client, err := newHuaweiDNSClient(cfg)
 	if err != nil {
 		return fmt.Errorf("failed to create Huawei Cloud client: %w", err)
 	}
 
+	// Step 2: Prepare the API request body.
+	// For this API, we only need to provide the parameters being changed: TTL and the IP records.
 	ttl := int32(cfg.DNS.TTL)
+	updateBody := &model.UpdateRecordSetReq{
+		Ttl:     &ttl,
+		Records: &ips, // 'records' is a slice of strings, where each element is an IP address.
+	}
 
+	// Step 3: Build the complete request object for the singular update operation.
 	updateReq := &model.UpdateRecordSetRequest{
 		RecordsetId: recordsetID,
-		Body: &model.UpdateRecordSetReq{
-			Ttl:     &ttl,
-			Records: &ips,
-		},
+		Body:        updateBody,
 	}
 
-	log.Printf("[info] Updating Huawei Cloud DNS records for recordset %s: %v", recordsetID, ips)
+	// Step 4: Execute the API call
+	log.Printf("[info] Updating Huawei Cloud DNS records for recordset %s with IPs: %v", recordsetID, ips)
 	_, err = client.UpdateRecordSet(updateReq)
 	if err != nil {
-		return fmt.Errorf("failed to call Huawei Cloud UpdateRecordSet API: %w", err)
+		return fmt.Errorf("failed to call Huawei Cloud UpdateRecordSet API for recordset %s: %w", recordsetID, err)
 	}
 
+	log.Printf("[info] Successfully updated recordset %s.", recordsetID)
 	return nil
 }
