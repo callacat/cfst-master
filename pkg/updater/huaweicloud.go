@@ -7,15 +7,14 @@ import (
 
 	"controller/pkg/config"
 	"github.com/huaweicloud/huaweicloud-sdk-go-v3/core/auth/basic"
-	"github.com/huaweicloud/huaweicloud-sdk-go-v3/core/region"
-
 	coreCfg "github.com/huaweicloud/huaweicloud-sdk-go-v3/core/config"
 	dns "github.com/huaweicloud/huaweicloud-sdk-go-v3/services/dns/v2"
-	// [修正] 修正了 'github.comcom' 的拼写错误
 	"github.com/huaweicloud/huaweicloud-sdk-go-v3/services/dns/v2/model"
+	// [新增] 导入 DNS 服务专属的 region 包
+	dnsRegion "github.com/huaweicloud/huaweicloud-sdk-go-v3/services/dns/v2/region"
 )
 
-// newHuaweiDNSClient 创建一个华为云 DNS 客户端 (优化版)
+// newHuaweiDNSClient 创建一个华为云 DNS 客户端 (修正版)
 func newHuaweiDNSClient(cfg *config.Config) (*dns.DnsClient, error) {
 	// 1. 认证信息
 	auth := basic.NewCredentialsBuilder().
@@ -24,10 +23,13 @@ func newHuaweiDNSClient(cfg *config.Config) (*dns.DnsClient, error) {
 		WithProjectId(cfg.Huawei.ProjectID).
 		Build()
 
-	// 2. 动态生成 Endpoint
-	endpoint := fmt.Sprintf("https://dns.%s.myhuaweicloud.com", cfg.Huawei.Region)
-	log.Printf("[debug] Using Huawei Cloud DNS endpoint: %s", endpoint)
-	r := region.NewRegion(cfg.Huawei.Region, endpoint)
+	// 2. [修正] 使用 SDK 的 region 功能，而不是手动拼接 Endpoint
+	// 这样可以确保 SDK 自动使用官方、正确的服务地址
+	r, err := dnsRegion.SafeValueOf(cfg.Huawei.Region)
+	if err != nil {
+		return nil, fmt.Errorf("invalid or unsupported region specified in config: %s, error: %w", cfg.Huawei.Region, err)
+	}
+	log.Printf("[debug] Using Huawei Cloud DNS region: %s", cfg.Huawei.Region)
 
 	// 3. 添加 HTTP 配置，设置网络超时
 	httpConfig := coreCfg.DefaultHttpConfig().
