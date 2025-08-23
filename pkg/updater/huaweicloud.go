@@ -5,7 +5,6 @@ import (
 	"log"
 
 	"controller/pkg/config"
-	// [新增] 下面是修复错误所需的 import 语句
 	"github.com/huaweicloud/huaweicloud-sdk-go-v3/core/auth/basic"
 	"github.com/huaweicloud/huaweicloud-sdk-go-v3/core/region"
 	dns "github.com/huaweicloud/huaweicloud-sdk-go-v3/services/dns/v2"
@@ -20,7 +19,9 @@ func newHuaweiDNSClient(cfg *config.Config) (*dns.DnsClient, error) {
 		WithProjectId(cfg.Huawei.ProjectID).
 		Build()
 
-	r := region.NewRegion(cfg.Huawei.Region, "https://dns.myhuaweicloud.com")
+	// [修改] 移除硬编码的 Endpoint URL，让 SDK 自动解析
+	// 旧代码: r := region.NewRegion(cfg.Huawei.Region, "https://dns.myhuaweicloud.com")
+	r := region.NewRegion(cfg.Huawei.Region)
 
 	client := dns.NewDnsClient(
 		dns.DnsClientBuilder().
