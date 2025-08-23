@@ -21,7 +21,7 @@ func newHuaweiDNSClient(cfg *config.Config) (*dns.DnsClient, error) {
 
 	// [修改] 移除硬编码的 Endpoint URL，让 SDK 自动解析
 	// 旧代码: r := region.NewRegion(cfg.Huawei.Region, "https://dns.myhuaweicloud.com")
-	r := region.NewRegion(cfg.Huawei.Region)
+	r := region.NewRegion(cfg.Huawei.Region, "https://dns.myhuaweicloud.com")
 
 	client := dns.NewDnsClient(
 		dns.DnsClientBuilder().

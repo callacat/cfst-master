@@ -31,6 +31,10 @@ jobs:
       - name: Tidy dependencies
         run: go mod tidy
 
+      # [ 新增 ] 在构建前强制更新华为云SDK
+      - name: Update Huawei Cloud SDK to latest
+        run: go get -u github.com/huaweicloud/huaweicloud-sdk-go-v3
+
       - name: Commit updated go.mod and go.sum
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
