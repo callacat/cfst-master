@@ -9,7 +9,7 @@ import (
 
 	"controller/pkg/aggregator"
 	"controller/pkg/config"
-	"controller/pkg.gist"
+	"controller/pkg/gist"
 	"controller/pkg/models"
 	"controller/pkg/selector"
 	"controller/pkg/updater"
