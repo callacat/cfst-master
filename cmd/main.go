@@ -6,7 +6,6 @@ import (
 	"log"
 	"os"
 	"strings"
-	"time"
 
 	"controller/pkg/aggregator"
 	"controller/pkg/config"
@@ -112,53 +111,4 @@ func main() {
 		allResults = append(allResults, drs...)
 	}
 	if len(allResults) == 0 {
-		log.Fatal("[FATAL] No valid device results found. Cannot continue.")
-	}
-	log.Printf("[PHASE 1 COMPLETE] Fetched a total of %d valid results.", len(allResults))
-
-	log.Println("\n[PHASE 2] AGGREGATING & SELECTING TOP IPs...")
-	ag := aggregator.Aggregate(allResults)
-	log.Printf("[info] Aggregated results into %d groups (e.g., 'cu-v4').", len(ag))
-	selected := selector.SelectTop(ag, cfg.DNS.Lines, cfg.Scoring, cfg.Thresholds)
-	log.Println("[PHASE 2 COMPLETE] Finished selecting top IPs.")
-
-	log.Println("\n[PHASE 3] PROCESSING DNS UPDATES...")
-	// [修改] 移除了 shouldUpdateDNS 判断，直接执行更新
-	if cfg.Huawei.Enabled {
-		log.Println("[info] Triggering DNS update process...")
-		if err := UpdateAll(selected, cfg); err != nil {
-			log.Fatalf("[FATAL] A critical error occurred during DNS update: %v", err)
-		}
-		log.Println("[info] DNS update process finished.")
-	} else {
-		log.Println("[info] Huawei Cloud updates are disabled in config. DNS update skipped.")
-	}
-	log.Println("[PHASE 3 COMPLETE]")
-
-	log.Println("\n[PHASE 4] UPLOADING RESULT GIST...")
-	// [修改] BuildResult 不再需要 state 参数
-	result := models.BuildResult(selected, cfg)
-	originalGistID := cfg.Gist.ResultGistID
-	outGistID, err := gc.CreateOrUpdateResultGist(cfg.Gist.ResultGistID, result)
-	if err != nil {
-		log.Fatalf("[FATAL] Failed to push result Gist: %v", err)
-	}
-
-	if originalGistID == "" && outGistID != "" {
-		log.Println("------------------------------------------------------------------------")
-		log.Printf("[ACTION REQUIRED] New Result Gist created with ID: %s", outGistID)
-		log.Printf("                  It is recommended to add this ID to your 'config.yml'.")
-		log.Printf("                  (ID has been saved to %s for auto-loading)", resultGistIDFilePath)
-		log.Println("------------------------------------------------------------------------")
-		if err := os.WriteFile(resultGistIDFilePath, []byte(outGistID), 0644); err != nil {
-			log.Printf("[warn] Failed to save result_gist_id to local file: %v", err)
-		}
-	}
-	log.Printf("[PHASE 4 COMPLETE] Result written to Gist: %s", outGistID)
-
-	log.Println("\n========================================================================")
-	log.Println(" R U N   F I N I S H E D")
-	log.Println("========================================================================")
-}
-
-// [已删除] loadState(), saveState(), shouldUpdateDNS() 函数已被完全移除
+		log.Fatal("[FATAL] No valid device results
