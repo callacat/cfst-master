@@ -1,16 +1,14 @@
-// 请将文件 pkg/selector/selector.go 的内容完全替换为以下代码
+// 请将此文件内容完全替换为以下代码
 
 package selector
 
 import (
 	"sort"
-	"strings"
 
 	"controller/pkg/config"
 	"controller/pkg/models"
 )
 
-// SelectTop 函数的逻辑已经能满足您的需求，但为了清晰，我们做一个小调整
 func SelectTop(
 	ag map[string][]models.DeviceResult,
 	lines []config.Line,
@@ -21,7 +19,6 @@ func SelectTop(
 	selectedResults := make(map[string]models.LineResult)
 
 	for _, ln := range lines {
-		// 分别处理 v4 和 v6
 		for _, ipVersion := range []string{"v4", "v6"} {
 			compositeKey := ln.Operator + "-" + ipVersion
 			list, ok := ag[compositeKey]
@@ -71,7 +68,6 @@ func SelectTop(
 					DLMbps:       r.DLMbps,
 					Region:       r.Region,
 				}
-				// 这里的逻辑自然满足 "数量不足时也上传" 的要求
 				if i < cap {
 					active = append(active, item)
 				} else {
