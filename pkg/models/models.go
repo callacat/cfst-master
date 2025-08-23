@@ -1,22 +1,25 @@
+// 请将文件 pkg/models/models.go 的内容完全替换为以下代码
+
 package models
 
 import (
 	"controller/pkg/config"
-	"fmt" // <-- THIS LINE FIXES THE ERROR
-	"strconv" // [ADD THIS] A better way to convert numbers
+	"fmt"
+	"strconv"
 	"time"
 )
 
 // DeviceResult 设备推送的单条测试记录
 type DeviceResult struct {
-	Device     string  `json:"device"`
-	Operator   string  `json:"operator"`
-	IP         string  `json:"ip"`
-	LatencyMs  int     `json:"latency_ms"`
-	LossPct    float64 `json:"loss_pct"`
-	DLMbps     float64 `json:"dl_mbps"`
-	Score      float64 `json:"score"`
-	IPVersion  string  `json:"-"`
+	Device    string  `json:"device"`
+	Operator  string  `json:"operator"` // 将由文件名填充
+	IP        string  `json:"ip"`
+	LatencyMs int     `json:"latency_ms"`
+	LossPct   float64 `json:"loss_pct"`
+	DLMbps    float64 `json:"dl_mbps"`
+	Region    string  `json:"region"`
+	Score     float64 `json:"score,omitempty"`
+	IPVersion string  `json:"-"` // 将由文件名填充
 }
 
 // SelectedItem 包含 IP 和其来源的详细信息
@@ -26,6 +29,7 @@ type SelectedItem struct {
 	Score        float64 `json:"score"`
 	LatencyMs    int     `json:"latency_ms"`
 	DLMbps       float64 `json:"dl_mbps"`
+	Region       string  `json:"region"`
 }
 
 // LineResult 包含 active 和 candidates 列表
@@ -60,7 +64,6 @@ func BuildResult(sel map[string]LineResult, state *State, cfg *config.Config) Fi
 		LastDNSWrite: state.LastDNSWrite,
 		NextDNSWriteAt: state.LastDNSWrite.Add(
 			time.Duration(cfg.Selection.CooldownMinutes) * time.Minute),
-		// [IMPROVED] Use strconv for cleaner number to string conversion
 		Explain: map[string]string{
 			"cooldown_minutes":     strconv.Itoa(cfg.Selection.CooldownMinutes),
 			"hysteresis_enter_pct": fmt.Sprintf("%.2f", cfg.Selection.HysteresisEnterPct),
@@ -69,7 +72,7 @@ func BuildResult(sel map[string]LineResult, state *State, cfg *config.Config) Fi
 			"max_loss_pct":         fmt.Sprintf("%.2f", cfg.Thresholds.MaxLossPct),
 		},
 	}
-	
+
 	for _, ln := range sel {
 		fr.Lines = append(fr.Lines, ln)
 	}
