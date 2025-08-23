@@ -39,22 +39,24 @@ func newHuaweiDNSClient(cfg *config.Config) (*dns.DnsClient, error) {
 	return client, nil
 }
 
-
-// [REFACTORED] UpdateHuaweiCloud now uses the UpdateRecordSets (plural) method.
+// UpdateHuaweiCloud has been corrected for the type mismatch.
 func UpdateHuaweiCloud(zoneId, recordsetID, recordName, recordType string, ips []string, cfg *config.Config) error {
 	client, err := newHuaweiDNSClient(cfg)
 	if err != nil {
 		return fmt.Errorf("failed to create Huawei Cloud client: %w", err)
 	}
 
-	// Build the request object based on the successful debug code.
+	// [FIX] Convert the 'int' from the config to 'int32' for the SDK.
+	ttlAsInt32 := int32(cfg.DNS.TTL)
+
+	// Build the request object using the corrected type.
 	request := &model.UpdateRecordSetsRequest{}
 	request.ZoneId = zoneId
 	request.RecordsetId = recordsetID
 	request.Body = &model.UpdateRecordSetsReq{
 		Name:    recordName,
 		Type:    recordType,
-		Ttl:     &cfg.DNS.TTL,
+		Ttl:     &ttlAsInt32, // Use the address of the newly converted int32 variable.
 		Records: &ips,
 	}
 
