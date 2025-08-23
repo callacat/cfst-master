@@ -1,7 +1,10 @@
+// 请将此文件的内容完整地覆盖到: pkg/config/config.go
+
 package config
 
 import (
 	"os"
+
 	"gopkg.in/yaml.v2"
 )
 
@@ -15,11 +18,11 @@ type Huawei struct {
 
 type Config struct {
 	Gist struct {
-		Token        string   `yaml:"token"`
-		ProxyPrefix  string   `yaml:"proxy_prefix"`
-		DeviceGists  []string `yaml:"device_gists"`
-		ResultGistID string   `yaml:"result_gist_id"`
-        MaxResultAgeHours int `yaml:"max_result_age_hours"`
+		Token             string   `yaml:"token"`
+		ProxyPrefix       string   `yaml:"proxy_prefix"`
+		DeviceGists       []string `yaml:"device_gists"`
+		ResultGistID      string   `yaml:"result_gist_id"`
+		MaxResultAgeHours int      `yaml:"max_result_age_hours"`
 	} `yaml:"gist"`
 
 	DNS struct {
@@ -32,7 +35,7 @@ type Config struct {
 	Huawei     Huawei     `yaml:"huawei"`
 	Scoring    Scoring    `yaml:"scoring"`
 	Thresholds Thresholds `yaml:"thresholds"`
-	Selection  Selection  `yaml:"selection"`
+	// [已删除] Selection 字段已被移除
 }
 
 type Line struct {
@@ -54,11 +57,7 @@ type Thresholds struct {
 	MaxLossPct      float64 `yaml:"max_loss_pct"`
 }
 
-type Selection struct {
-	CooldownMinutes    int     `yaml:"cooldown_minutes"`
-	HysteresisEnterPct float64 `yaml:"hysteresis_enter_pct"`
-	HysteresisExitPct  float64 `yaml:"hysteresis_exit_pct"`
-}
+// [已删除] Selection 结构体已被完全移除
 
 func Load(path string) (*Config, error) {
 	data, err := os.ReadFile(path)
