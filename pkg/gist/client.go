@@ -1,4 +1,4 @@
-// 请将文件 pkg/gist/client.go 的内容完全替换为以下代码
+// 请将此文件内容完全替换为以下代码
 
 package gist
 
@@ -35,7 +35,6 @@ func NewClient(token, proxyPrefix string) *Client {
 }
 
 func (c *Client) doRequestWithRetry(req *http.Request, maxRetries int) (*http.Response, error) {
-	// ... (此函数无需修改，保持原样)
 	req.Header.Set("User-Agent", browserUserAgent)
 	var err error
 	var resp *http.Response
@@ -57,7 +56,6 @@ func (c *Client) doRequestWithRetry(req *http.Request, maxRetries int) (*http.Re
 	return resp, err
 }
 
-// [核心修改] FetchDeviceResults 适配新的数据格式和文件名解析逻辑
 func (c *Client) FetchDeviceResults(gistID string, maxAgeHours int) ([]models.DeviceResult, error) {
 	log.Printf("[info] ---> Fetching data from Gist ID: %s", gistID)
 	apiRequestURL := c.buildURL("https://api.github.com/gists/" + gistID)
@@ -93,19 +91,18 @@ func (c *Client) FetchDeviceResults(gistID string, maxAgeHours int) ([]models.De
 	}
 
 	var allResults []models.DeviceResult
-	// [修改] 使用新的正则表达式来捕获 operator 和 ipVersion
 	re := regexp.MustCompile(`results6?-(ct|cu|cm)-.*-(v4|v6)\.json`)
 
 	for _, file := range gist.Files {
 		matches := re.FindStringSubmatch(strings.ToLower(file.Filename))
-		if len(matches) != 3 { // 需要匹配到 (文件名, operator, ipVersion) 这3个部分
+		if len(matches) != 3 {
 			continue
 		}
 		operator, ipVersion := matches[1], matches[2]
 		log.Printf("[info]     + Processing matching file: %s (Operator: %s, IPVersion: %s)", file.Filename, operator, ipVersion)
 
 		finalDownloadURL := c.buildURL(file.RawURL)
-		req, _ = http.NewRequest("GET", finalDownloadURL, nil) // Re-create request for retry logic
+		req, _ = http.NewRequest("GET", finalDownloadURL, nil)
 		dataResp, err := c.doRequestWithRetry(req, 3)
 		if err != nil || dataResp == nil {
 			log.Printf("[warn]       Failed to download content for %s. Skipping.", file.Filename)
@@ -122,7 +119,6 @@ func (c *Client) FetchDeviceResults(gistID string, maxAgeHours int) ([]models.De
 			continue
 		}
 
-		// [修改] 将从文件名中解析出的信息填充到每条记录中
 		for i := range data.Results {
 			data.Results[i].Operator = operator
 			data.Results[i].IPVersion = ipVersion
@@ -135,9 +131,8 @@ func (c *Client) FetchDeviceResults(gistID string, maxAgeHours int) ([]models.De
 	return allResults, nil
 }
 
-// CreateOrUpdateResultGist 无需修改，保持原样
+
 func (c *Client) CreateOrUpdateResultGist(gistID string, fr models.FinalResult) (string, error) {
-	// ... (此函数无需修改，保持原样)
 	content, _ := json.MarshalIndent(fr, "", "  ")
 	bodyMap := map[string]interface{}{
 		"description": "Multi-Net 优选 IP 结果",
@@ -165,7 +160,8 @@ func (c *Client) CreateOrUpdateResultGist(gistID string, fr models.FinalResult) 
 
 	resp, err := c.doRequestWithRetry(req, 3)
 	if err != nil || resp == nil {
-		return nil, fmt.Errorf("failed to create/update result Gist after retries: %v", err)
+		// [修正] 返回 "" 而不是 nil
+		return "", fmt.Errorf("failed to create/update result Gist after retries: %v", err)
 	}
 	defer resp.Body.Close()
 
@@ -173,6 +169,7 @@ func (c *Client) CreateOrUpdateResultGist(gistID string, fr models.FinalResult) 
 		ID string `json:"id"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&respObj); err != nil {
+		// [修正] 返回 "" 而不是 nil
 		return "", err
 	}
 	log.Println("[info] <--- Successfully created/updated result Gist.")
