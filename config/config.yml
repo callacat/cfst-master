@@ -27,4 +27,26 @@ dns:
     - operator: "cm"
       a_recordset_id: "34567890"
       aaaa_recordset_id: "09876543"
-      cap:
+      cap: 2
+
+# 华为云项目 ID 和认证信息
+huawei:
+  enabled: true # 华为云更新开关
+  project_id: "${HUAWEI_PROJECT_ID}"
+  access_key: "${HUAWEI_ACCESS_KEY}"
+  secret_key: "${HUAWEI_SECRET_KEY}"
+  region: "cn-north-4"
+
+# 打分权重
+scoring:
+  latency_weight: 0.5
+  speed_weight:   0.3
+  loss_weight:    -0.1
+
+# 筛选阈值
+thresholds:
+  max_latency_ms: 80
+  min_download_mbps: 10
+  max_loss_pct: 1.0
+
+# [已删除] selection 配置块已被完全移除
