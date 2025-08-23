@@ -1,3 +1,5 @@
+// 请将文件 pkg/gist/client.go 的内容完全替换为以下代码
+
 package gist
 
 import (
@@ -33,6 +35,7 @@ func NewClient(token, proxyPrefix string) *Client {
 }
 
 func (c *Client) doRequestWithRetry(req *http.Request, maxRetries int) (*http.Response, error) {
+	// ... (此函数无需修改，保持原样)
 	req.Header.Set("User-Agent", browserUserAgent)
 	var err error
 	var resp *http.Response
@@ -54,27 +57,24 @@ func (c *Client) doRequestWithRetry(req *http.Request, maxRetries int) (*http.Re
 	return resp, err
 }
 
+// [核心修改] FetchDeviceResults 适配新的数据格式和文件名解析逻辑
 func (c *Client) FetchDeviceResults(gistID string, maxAgeHours int) ([]models.DeviceResult, error) {
 	log.Printf("[info] ---> Fetching data from Gist ID: %s", gistID)
 	apiRequestURL := c.buildURL("https://api.github.com/gists/" + gistID)
-	log.Printf("[debug]      Requesting Gist metadata from: %s", apiRequestURL)
 	req, _ := http.NewRequest("GET", apiRequestURL, nil)
 	req.Header.Set("Authorization", "token "+c.token)
 
 	resp, err := c.doRequestWithRetry(req, 3)
 	if err != nil || resp == nil {
-		log.Printf("[error] Failed to fetch Gist metadata for %s after retries", gistID)
-		return nil, fmt.Errorf("failed to fetch Gist metadata")
+		return nil, fmt.Errorf("failed to fetch Gist metadata for %s: %v", gistID, err)
 	}
 	defer resp.Body.Close()
-	
+
 	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
-		log.Printf("[error] Failed to read Gist metadata response body for %s: %v", gistID, err)
-		return nil, err
+		return nil, fmt.Errorf("failed to read Gist metadata response body for %s: %v", gistID, err)
 	}
 
-	// [CRITICAL FIX] Correct the struct definition for JSON parsing
 	var gist struct {
 		Files map[string]struct {
 			Filename string `json:"filename"`
@@ -84,61 +84,60 @@ func (c *Client) FetchDeviceResults(gistID string, maxAgeHours int) ([]models.De
 	}
 
 	if err := json.Unmarshal(bodyBytes, &gist); err != nil {
-		log.Printf("[error] Failed to decode Gist JSON for %s: %v", gistID, err)
-		return nil, err
+		return nil, fmt.Errorf("failed to decode Gist JSON for %s: %v", gistID, err)
 	}
-	
+
 	if maxAgeHours > 0 && time.Since(gist.UpdatedAt) > time.Duration(maxAgeHours)*time.Hour {
 		log.Printf("[info]     Gist %s is too old (updated at %v), skipping.", gistID, gist.UpdatedAt)
 		return nil, nil
 	}
-	
+
 	var allResults []models.DeviceResult
+	// [修改] 使用新的正则表达式来捕获 operator 和 ipVersion
 	re := regexp.MustCompile(`results6?-(ct|cu|cm)-.*-(v4|v6)\.json`)
 
-	log.Printf("[info]     Found %d file(s) in Gist %s. Processing them now...", len(gist.Files), gistID)
 	for _, file := range gist.Files {
-		if file.RawURL == "" {
-			log.Printf("[warn]       File '%s' was parsed but is missing 'raw_url'. This can happen with a misconfigured proxy. Skipping.", file.Filename)
-			continue
-		}
 		matches := re.FindStringSubmatch(strings.ToLower(file.Filename))
-		if len(matches) != 3 {
+		if len(matches) != 3 { // 需要匹配到 (文件名, operator, ipVersion) 这3个部分
 			continue
 		}
-		log.Printf("[info]     + Processing matching file: %s", file.Filename)
 		operator, ipVersion := matches[1], matches[2]
+		log.Printf("[info]     + Processing matching file: %s (Operator: %s, IPVersion: %s)", file.Filename, operator, ipVersion)
 
 		finalDownloadURL := c.buildURL(file.RawURL)
-		log.Printf("[debug]      Attempting to download from final URL: %s", finalDownloadURL)
-
-		req, _ = http.NewRequest("GET", finalDownloadURL, nil)
+		req, _ = http.NewRequest("GET", finalDownloadURL, nil) // Re-create request for retry logic
 		dataResp, err := c.doRequestWithRetry(req, 3)
 		if err != nil || dataResp == nil {
-			log.Printf("[warn]       Failed to download content. Skipping file.")
+			log.Printf("[warn]       Failed to download content for %s. Skipping.", file.Filename)
 			continue
 		}
 		defer dataResp.Body.Close()
-		
+
 		body, _ := io.ReadAll(dataResp.Body)
-		var drs []models.DeviceResult
-		if err := json.Unmarshal(body, &drs); err != nil {
+		var data struct {
+			Results []models.DeviceResult `json:"results"`
+		}
+		if err := json.Unmarshal(body, &data); err != nil {
 			log.Printf("[warn]       Failed to unmarshal content from %s. Error: %v", file.Filename, err)
 			continue
 		}
-		
-		for i := range drs {
-			drs[i].Operator = operator
-			drs[i].IPVersion = ipVersion
+
+		// [修改] 将从文件名中解析出的信息填充到每条记录中
+		for i := range data.Results {
+			data.Results[i].Operator = operator
+			data.Results[i].IPVersion = ipVersion
 		}
-		allResults = append(allResults, drs...)
-		log.Printf("[info]       Successfully processed file %s, found %d valid results.", file.Filename, len(drs))
+
+		allResults = append(allResults, data.Results...)
+		log.Printf("[info]       Successfully processed %s, found %d valid results.", file.Filename, len(data.Results))
 	}
 	log.Printf("[info] <--- Finished fetching Gist %s, total valid results gathered: %d", gistID, len(allResults))
 	return allResults, nil
 }
 
+// CreateOrUpdateResultGist 无需修改，保持原样
 func (c *Client) CreateOrUpdateResultGist(gistID string, fr models.FinalResult) (string, error) {
+	// ... (此函数无需修改，保持原样)
 	content, _ := json.MarshalIndent(fr, "", "  ")
 	bodyMap := map[string]interface{}{
 		"description": "Multi-Net 优选 IP 结果",
@@ -166,11 +165,10 @@ func (c *Client) CreateOrUpdateResultGist(gistID string, fr models.FinalResult) 
 
 	resp, err := c.doRequestWithRetry(req, 3)
 	if err != nil || resp == nil {
-		log.Printf("[error] Failed to create/update result Gist after retries.")
-		return "", fmt.Errorf("failed to create/update result Gist after retries: %v", err)
+		return nil, fmt.Errorf("failed to create/update result Gist after retries: %v", err)
 	}
 	defer resp.Body.Close()
-	
+
 	var respObj struct {
 		ID string `json:"id"`
 	}
