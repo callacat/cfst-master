@@ -1,7 +1,8 @@
+// 请将此文件的内容完整地覆盖到: cmd/main.go
+
 package main
 
 import (
-	"encoding/json"
 	"log"
 	"os"
 	"strings"
@@ -16,7 +17,6 @@ import (
 )
 
 const configFilePath = "config/config.yml"
-const stateFilePath = "config/state.json"
 const resultGistIDFilePath = "config/result_gist_id.txt"
 
 func UpdateAll(selected map[string]models.LineResult, cfg *config.Config) error {
@@ -45,7 +45,11 @@ func UpdateAll(selected map[string]models.LineResult, cfg *config.Config) error 
 		}
 
 		var recordsetID string
-		if ipVersion == "v4" { recordsetID = lineCfg.ARecordsetID } else { recordsetID = lineCfg.AAAARecordsetID }
+		if ipVersion == "v4" {
+			recordsetID = lineCfg.ARecordsetID
+		} else {
+			recordsetID = lineCfg.AAAARecordsetID
+		}
 
 		if recordsetID == "" {
 			continue
@@ -71,7 +75,6 @@ func UpdateAll(selected map[string]models.LineResult, cfg *config.Config) error 
 	return nil
 }
 
-
 func main() {
 	log.Println("========================================================================")
 	log.Println(" M U L T I - N E T   C O N T R O L L E R   S T A R T I N G")
@@ -96,7 +99,6 @@ func main() {
 		}
 	}
 
-	state := loadState()
 	gc := gist.NewClient(cfg.Gist.Token, cfg.Gist.ProxyPrefix)
 
 	log.Println("\n[PHASE 1] FETCHING DEVICE RESULTS...")
@@ -121,26 +123,21 @@ func main() {
 	log.Println("[PHASE 2 COMPLETE] Finished selecting top IPs.")
 
 	log.Println("\n[PHASE 3] PROCESSING DNS UPDATES...")
-    // [MODIFIED] Simplified DNS update logic
+	// [修改] 移除了 shouldUpdateDNS 判断，直接执行更新
 	if cfg.Huawei.Enabled {
-		if shouldUpdateDNS(state, cfg) {
-			log.Println("[info] Conditions met. Triggering DNS update process...")
-			if err := UpdateAll(selected, cfg); err != nil {
-				log.Fatalf("[FATAL] A critical error occurred during DNS update: %v", err)
-			}
-			log.Println("[info] DNS update process finished.")
-			state.LastDNSWrite = time.Now()
-			saveState(state)
-		} else {
-			log.Println("[info] DNS update not required (in cooldown or no better IPs).")
+		log.Println("[info] Triggering DNS update process...")
+		if err := UpdateAll(selected, cfg); err != nil {
+			log.Fatalf("[FATAL] A critical error occurred during DNS update: %v", err)
 		}
+		log.Println("[info] DNS update process finished.")
 	} else {
 		log.Println("[info] Huawei Cloud updates are disabled in config. DNS update skipped.")
 	}
 	log.Println("[PHASE 3 COMPLETE]")
 
 	log.Println("\n[PHASE 4] UPLOADING RESULT GIST...")
-	result := models.BuildResult(selected, state, cfg)
+	// [修改] BuildResult 不再需要 state 参数
+	result := models.BuildResult(selected, cfg)
 	originalGistID := cfg.Gist.ResultGistID
 	outGistID, err := gc.CreateOrUpdateResultGist(cfg.Gist.ResultGistID, result)
 	if err != nil {
@@ -158,35 +155,10 @@ func main() {
 		}
 	}
 	log.Printf("[PHASE 4 COMPLETE] Result written to Gist: %s", outGistID)
-	
+
 	log.Println("\n========================================================================")
 	log.Println(" R U N   F I N I S H E D")
 	log.Println("========================================================================")
 }
 
-func loadState() *models.State {
-	data, err := os.ReadFile(stateFilePath)
-	if err != nil {
-		log.Println("[warn] state file not found, creating new state")
-		return &models.State{}
-	}
-	var state models.State
-	if err := json.Unmarshal(data, &state); err != nil {
-		log.Fatalf("[FATAL] failed to parse state file: %v", err)
-	}
-	return &state
-}
-
-func saveState(state *models.State) {
-	data, _ := json.MarshalIndent(state, "", "  ")
-	if err := os.WriteFile(stateFilePath, data, 0644); err != nil {
-		log.Printf("[warn] failed to save state file: %v", err)
-	}
-}
-
-func shouldUpdateDNS(state *models.State, cfg *config.Config) bool {
-	if time.Since(state.LastDNSWrite) < time.Duration(cfg.Selection.CooldownMinutes)*time.Minute {
-		return false
-	}
-	return true
-}
+// [已删除] loadState(), saveState(), shouldUpdateDNS() 函数已被完全移除
