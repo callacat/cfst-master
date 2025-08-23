@@ -3,6 +3,7 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"os"
 	"strings"
@@ -18,62 +19,90 @@ import (
 const configFilePath = "config/config.yml"
 const resultGistIDFilePath = "config/result_gist_id.txt"
 
+// [优化可读性] UpdateAll 函数现在包含更清晰的日志和变量名
 func UpdateAll(selected map[string]models.LineResult, cfg *config.Config) error {
 	if !cfg.Huawei.Enabled {
-		log.Println("[info] Huawei Cloud updates are disabled in the config, skipping.")
+		log.Println("[info] 华为云更新功能已在配置中禁用, 跳过更新。")
 		return nil
 	}
-	log.Printf("[info] DNS provider is Huawei Cloud. Preparing to update records.")
+	log.Printf("[info] DNS 提供商为华为云, 准备更新解析记录。")
 
+	// 创建一个从 operator 代码到其配置的映射，方便快速查找
 	lineCfgMap := make(map[string]config.Line)
 	for _, lc := range cfg.DNS.Lines {
 		lineCfgMap[lc.Operator] = lc
 	}
+	
+	// [新增] 创建一个映射，用于在日志中显示更友好的运营商名称
+	operatorFriendlyNames := map[string]string{
+		"cm": "中国移动",
+		"cu": "中国联通",
+		"ct": "中国电信",
+	}
 
 	updateCount := 0
+	// 遍历已筛选出的结果 (例如 "cu-v4", "cm-v6" 等)
 	for key, lineResult := range selected {
 		if len(lineResult.Active) == 0 {
-			continue
+			continue // 如果没有筛选出活动的IP，则跳过
 		}
 
 		parts := strings.Split(key, "-")
-		operator, ipVersion := parts[0], parts[1]
-		lineCfg, ok := lineCfgMap[operator]
+		operatorCode, ipVersion := parts[0], parts[1]
+		
+		// 从配置中查找此运营商的线路设置
+		lineCfg, ok := lineCfgMap[operatorCode]
 		if !ok {
+			log.Printf("[warn] 在 config.yml 中未找到运营商 '%s' 的配置, 跳过。", operatorCode)
 			continue
 		}
 
-		var recordsetID string
+		var recordsetID, recordType string
 		if ipVersion == "v4" {
 			recordsetID = lineCfg.ARecordsetID
-		} else {
+			recordType = "A"
+		} else { // ipVersion == "v6"
 			recordsetID = lineCfg.AAAARecordsetID
+			recordType = "AAAA"
 		}
 
 		if recordsetID == "" {
+			log.Printf("[warn] 运营商 '%s' 的 %s 记录集 ID 为空, 跳过。", operatorCode, recordType)
 			continue
 		}
 
-		var ips []string
+		// 准备要更新的 IP 列表
+		var ipsToUpdate []string
 		for _, item := range lineResult.Active {
-			ips = append(ips, item.IP)
+			ipsToUpdate = append(ipsToUpdate, item.IP)
 		}
+		
+		// 准备更新所需的其他参数
+		zoneId := cfg.DNS.ZoneId
+		fullRecordName := fmt.Sprintf("%s.%s.", cfg.DNS.Subdomain, cfg.DNS.Domain)
+		friendlyName := operatorFriendlyNames[operatorCode] // 获取友好的中文名
 
-		log.Printf("[info]     Updating recordset for line '%s' (ID: %s) with IPs: %v", key, recordsetID, ips)
-		if err := updater.UpdateHuaweiCloud(recordsetID, ips, cfg); err != nil {
-			log.Printf("[error]    => FAILED to update DNS for line %s: %v", key, err)
-			return err
+		log.Printf("[info]     准备更新 [%s-%s] 线路 (运营商: %s)", friendlyName, ipVersion, operatorCode)
+		log.Printf("[info]     => 记录名: %s, 记录集ID: %s", fullRecordName, recordsetID)
+		
+		// 调用更新函数
+		err := updater.UpdateHuaweiCloud(zoneId, recordsetID, fullRecordName, recordType, ipsToUpdate, cfg)
+		if err != nil {
+			log.Printf("[error]    => 更新失败: %v", err)
+			return err // 如果单次更新失败，则终止整个流程
 		}
-		log.Printf("[info]    => SUCCESS for line %s.", key)
+		
+		log.Printf("[info]    => 成功更新 %d 个IP: %v", len(ipsToUpdate), ipsToUpdate)
 		updateCount++
 	}
 
 	if updateCount == 0 {
-		log.Println("[info] No DNS records needed updating in this run.")
+		log.Println("[info] 本次运行没有需要更新的 DNS 记录。")
 	}
 	return nil
 }
 
+// main 函数保持不变
 func main() {
 	log.Println("========================================================================")
 	log.Println(" M U L T I - N E T   C O N T R O L L E R   S T A R T I N G")
@@ -82,6 +111,10 @@ func main() {
 	cfg, err := config.Load(configFilePath)
 	if err != nil {
 		log.Fatalf("[error] Failed to load config: %v", err)
+	}
+
+	if cfg.DNS.ZoneId == "" || cfg.DNS.ZoneId == "YOUR_ZONE_ID_HERE" {
+		log.Fatalf("[FATAL] 'dns.zone_id' is not set in config.yml. Please add your Zone ID to proceed.")
 	}
 
 	if cfg.Gist.ResultGistID == "" {
@@ -122,14 +155,8 @@ func main() {
 	log.Println("[PHASE 2 COMPLETE] Finished selecting top IPs.")
 
 	log.Println("\n[PHASE 3] PROCESSING DNS UPDATES...")
-	if cfg.Huawei.Enabled {
-		log.Println("[info] Triggering DNS update process...")
-		if err := UpdateAll(selected, cfg); err != nil {
-			log.Fatalf("[FATAL] A critical error occurred during DNS update: %v", err)
-		}
-		log.Println("[info] DNS update process finished.")
-	} else {
-		log.Println("[info] Huawei Cloud updates are disabled in config. DNS update skipped.")
+	if err := UpdateAll(selected, cfg); err != nil {
+		log.Fatalf("[FATAL] A critical error occurred during DNS update: %v", err)
 	}
 	log.Println("[PHASE 3 COMPLETE]")
 
@@ -145,7 +172,6 @@ func main() {
 		log.Println("------------------------------------------------------------------------")
 		log.Printf("[ACTION REQUIRED] New Result Gist created with ID: %s", outGistID)
 		log.Printf("                  It is recommended to add this ID to your 'config.yml'.")
-		// [修正] 将 log.Printf 分成多行以避免语法错误
 		log.Printf("                  (ID has been saved to %s for auto-loading)", resultGistIDFilePath)
 		log.Println("------------------------------------------------------------------------")
 		if err := os.WriteFile(resultGistIDFilePath, []byte(outGistID), 0644); err != nil {

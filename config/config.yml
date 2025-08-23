@@ -11,10 +11,16 @@ gist:
   result_gist_id: "" # 留空则首次创建
 
 # DNS 设置 (仅华为云)
+# cm: 中国移动 (China Mobile)
+
+# cu: 中国联通 (China Unicom)
+
+# ct: 中国电信 (China Telecom)
 dns:
+  zone_id: "YOUR_ZONE_ID_HERE"
   domain: "example.com"
   subdomain: "cf"
-  ttl: 180
+  ttl: 1
   lines:
     - operator: "ct"
       a_recordset_id: "12345678"
