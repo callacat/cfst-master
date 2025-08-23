@@ -21,6 +21,7 @@ dns:
   domain: "example.com"
   subdomain: "cf"
   ttl: 1
+  gist_upload_cap: 5
   lines:
     - operator: "ct"
       a_recordset_id: "12345678"

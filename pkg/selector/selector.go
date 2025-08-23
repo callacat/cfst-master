@@ -3,11 +3,18 @@
 package selector
 
 import (
+	"math" // [新增] 导入 math 包
 	"sort"
 
 	"controller/pkg/config"
 	"controller/pkg/models"
 )
+
+// [新增] roundFloat 函数用于将浮点数四舍五入到指定的小数位数
+func roundFloat(val float64, precision uint) float64 {
+	ratio := math.Pow(10, float64(precision))
+	return math.Round(val*ratio) / ratio
+}
 
 func SelectTop(
 	ag map[string][]models.DeviceResult,
@@ -37,7 +44,9 @@ func SelectTop(
 				score := sc.LatencyWeight*float64(r.LatencyMs) +
 					sc.SpeedWeight*r.DLMbps +
 					sc.LossWeight*r.LossPct
-				r.Score = score
+				
+				// [修改] 在此处将分数格式化为小数点后两位
+				r.Score = roundFloat(score, 2)
 				qualified = append(qualified, r)
 			}
 
@@ -58,7 +67,7 @@ func SelectTop(
 			})
 
 			var active, candidates []models.SelectedItem
-			cap := ln.Cap
+			dnsCap := ln.Cap // DNS 更新数量
 			for i, r := range uniq {
 				item := models.SelectedItem{
 					IP:           r.IP,
@@ -68,11 +77,12 @@ func SelectTop(
 					DLMbps:       r.DLMbps,
 					Region:       r.Region,
 				}
-				if i < cap {
+				// 这里的 cap 是用于 DNS 更新的
+				if i < dnsCap {
 					active = append(active, item)
-				} else {
-					candidates = append(candidates, item)
 				}
+				// 依然保留所有合格的 IP 到 candidates，Gist 上传的筛选将在下一步骤处理
+				candidates = append(candidates, item)
 			}
 			
 			if len(active) > 0 || len(candidates) > 0 {

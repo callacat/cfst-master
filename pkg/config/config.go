@@ -26,11 +26,12 @@ type Config struct {
 	} `yaml:"gist"`
 
 	DNS struct {
-		ZoneId    string `yaml:"zone_id"` // [FIX] Added the ZoneId field to match the config file.
-		Domain    string `yaml:"domain"`
-		Subdomain string `yaml:"subdomain"`
-		TTL       int    `yaml:"ttl"`
-		Lines     []Line `yaml:"lines"`
+		ZoneId        string `yaml:"zone_id"`
+		Domain        string `yaml:"domain"`
+		Subdomain     string `yaml:"subdomain"`
+		TTL           int    `yaml:"ttl"`
+		GistUploadCap int    `yaml:"gist_upload_cap"` // [新增]
+		Lines         []Line `yaml:"lines"`
 	} `yaml:"dns"`
 
 	Huawei     Huawei     `yaml:"huawei"`
