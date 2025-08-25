@@ -3,6 +3,7 @@
 package models
 
 import (
+	"encoding/json" // [修正] 导入 encoding/json 包
 	"fmt"
 	"time"
 )
@@ -51,7 +52,8 @@ type GistFileContent struct {
 func BuildResultGistFiles(sel map[string]LineResult) map[string]string {
 	filesToUpload := make(map[string]string)
 
-	for key, ln := range sel {
+	// [修正] 移除了未使用的变量 key
+	for _, ln := range sel {
 		if len(ln.Candidates) == 0 {
 			continue // 如果没有任何合格的 IP，则不生成该文件
 		}
