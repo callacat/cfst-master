@@ -1,10 +1,18 @@
 # 请将此文件的内容完整地覆盖到: config/config.yml
 
+# [新增] 定时任务设置
+cron:
+  # 每10分钟执行一次: "*/10 * * * *"
+  # 每小时执行一次: "0 * * * *"
+  # 更多 cron 表达式示例请参考: https://crontab.guru/
+  spec: "*/10 * * * *"
+
 # GitHub Gist
 gist:
   token: "${GITHUB_TOKEN}"
   proxy_prefix: ""
-  max_result_age_hours: 24
+  # [修改] Gist 更新检测时间（分钟），只处理在此时间范围内更新过的 Gist
+  gist_update_check_minutes: 20 
   device_gists:
     - "aaaabbbbcccc111122223333"
     - "ddddeeeeffff444455556666"
@@ -12,16 +20,13 @@ gist:
 
 # DNS 设置 (仅华为云)
 # cm: 中国移动 (China Mobile)
-
 # cu: 中国联通 (China Unicom)
-
 # ct: 中国电信 (China Telecom)
 dns:
   zone_id: "YOUR_ZONE_ID_HERE"
   domain: "example.com"
   subdomain: "cf"
   ttl: 1
-  gist_upload_cap: 5
   lines:
     - operator: "ct"
       a_recordset_id: "12345678"
@@ -55,5 +60,3 @@ thresholds:
   max_latency_ms: 80
   min_download_mbps: 10
   max_loss_pct: 1.0
-
-# [已删除] selection 配置块已被完全移除

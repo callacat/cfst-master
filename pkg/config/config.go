@@ -17,21 +17,25 @@ type Huawei struct {
 }
 
 type Config struct {
+	// [新增] Cron 配置
+	Cron struct {
+		Spec string `yaml:"spec"`
+	} `yaml:"cron"`
+
 	Gist struct {
-		Token             string   `yaml:"token"`
-		ProxyPrefix       string   `yaml:"proxy_prefix"`
-		DeviceGists       []string `yaml:"device_gists"`
-		ResultGistID      string   `yaml:"result_gist_id"`
-		MaxResultAgeHours int      `yaml:"max_result_age_hours"`
+		Token                  string   `yaml:"token"`
+		ProxyPrefix            string   `yaml:"proxy_prefix"`
+		DeviceGists            []string `yaml:"device_gists"`
+		ResultGistID           string   `yaml:"result_gist_id"`
+		GistUpdateCheckMinutes int      `yaml:"gist_update_check_minutes"` // [修改]
 	} `yaml:"gist"`
 
 	DNS struct {
-		ZoneId        string `yaml:"zone_id"`
-		Domain        string `yaml:"domain"`
-		Subdomain     string `yaml:"subdomain"`
-		TTL           int    `yaml:"ttl"`
-		GistUploadCap int    `yaml:"gist_upload_cap"` // [新增]
-		Lines         []Line `yaml:"lines"`
+		ZoneId    string `yaml:"zone_id"`
+		Domain    string `yaml:"domain"`
+		Subdomain string `yaml:"subdomain"`
+		TTL       int    `yaml:"ttl"`
+		Lines     []Line `yaml:"lines"`
 	} `yaml:"dns"`
 
 	Huawei     Huawei     `yaml:"huawei"`

@@ -56,7 +56,8 @@ func (c *Client) doRequestWithRetry(req *http.Request, maxRetries int) (*http.Re
 	return resp, err
 }
 
-func (c *Client) FetchDeviceResults(gistID string, maxAgeHours int) ([]models.DeviceResult, error) {
+// [修改] 参数 maxAgeMinutes int
+func (c *Client) FetchDeviceResults(gistID string, maxAgeMinutes int) ([]models.DeviceResult, error) {
 	log.Printf("[info] ---> Fetching data from Gist ID: %s", gistID)
 	apiRequestURL := c.buildURL("https://api.github.com/gists/" + gistID)
 	req, _ := http.NewRequest("GET", apiRequestURL, nil)
@@ -84,8 +85,9 @@ func (c *Client) FetchDeviceResults(gistID string, maxAgeHours int) ([]models.De
 	if err := json.Unmarshal(bodyBytes, &gist); err != nil {
 		return nil, fmt.Errorf("failed to decode Gist JSON for %s: %v", gistID, err)
 	}
-
-	if maxAgeHours > 0 && time.Since(gist.UpdatedAt) > time.Duration(maxAgeHours)*time.Hour {
+	
+	// [修改] 使用分钟进行时间比较
+	if maxAgeMinutes > 0 && time.Since(gist.UpdatedAt) > time.Duration(maxAgeMinutes)*time.Minute {
 		log.Printf("[info]     Gist %s is too old (updated at %v), skipping.", gistID, gist.UpdatedAt)
 		return nil, nil
 	}
@@ -131,15 +133,22 @@ func (c *Client) FetchDeviceResults(gistID string, maxAgeHours int) ([]models.De
 	return allResults, nil
 }
 
+// [重构] CreateOrUpdateResultGist 现在接收一个文件名到内容的映射
+func (c *Client) CreateOrUpdateResultGist(gistID string, filesToUpload map[string]string) (string, error) {
+	if len(filesToUpload) == 0 {
+		log.Println("[info] No files to upload to Gist. Skipping.")
+		return gistID, nil
+	}
 
-func (c *Client) CreateOrUpdateResultGist(gistID string, fr models.FinalResult) (string, error) {
-	content, _ := json.MarshalIndent(fr, "", "  ")
+	fileMap := make(map[string]map[string]string)
+	for filename, content := range filesToUpload {
+		fileMap[filename] = map[string]string{"content": content}
+	}
+
 	bodyMap := map[string]interface{}{
-		"description": "Multi-Net 优选 IP 结果",
+		"description": "Multi-Net 优选 IP 结果 (分线路)",
 		"public":      false,
-		"files": map[string]map[string]string{
-			"selected.json": {"content": string(content)},
-		},
+		"files":       fileMap,
 	}
 	bodyBytes, _ := json.Marshal(bodyMap)
 
@@ -160,7 +169,6 @@ func (c *Client) CreateOrUpdateResultGist(gistID string, fr models.FinalResult) 
 
 	resp, err := c.doRequestWithRetry(req, 3)
 	if err != nil || resp == nil {
-		// [修正] 返回 "" 而不是 nil
 		return "", fmt.Errorf("failed to create/update result Gist after retries: %v", err)
 	}
 	defer resp.Body.Close()
@@ -169,7 +177,6 @@ func (c *Client) CreateOrUpdateResultGist(gistID string, fr models.FinalResult) 
 		ID string `json:"id"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&respObj); err != nil {
-		// [修正] 返回 "" 而不是 nil
 		return "", err
 	}
 	log.Println("[info] <--- Successfully created/updated result Gist.")
