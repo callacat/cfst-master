@@ -24,10 +24,9 @@ import (
 const configFilePath = "config/config.yml"
 const resultGistIDFilePath = "config/result_gist_id.txt"
 
-// AppContext 包含应用程序的共享状态
+// AppContext 包含应用程序的共享状态，特别是需要在任务间持久化的 Gist ID
 type AppContext struct {
-	Config *config.Config
-	GistID string
+	ResultGistID string
 }
 
 func UpdateAll(selected map[string]models.LineResult, cfg *config.Config) (int, error) {
@@ -98,9 +97,8 @@ func UpdateAll(selected map[string]models.LineResult, cfg *config.Config) (int, 
 	return updateCount, nil
 }
 
-// [重构] runTask 封装了单次执行的核心逻辑
-func runTask(appCtx *AppContext) {
-	cfg := appCtx.Config
+// [修改] runTask 现在接收配置和 Gist ID 作为参数，不再依赖外部上下文
+func runTask(cfg *config.Config, resultGistID string) string {
 	log.Println("========================================================================")
 	log.Printf(" [ %s ] R U N N I N G   T A S K", time.Now().Format(time.RFC1123))
 	log.Println("========================================================================")
@@ -121,7 +119,7 @@ func runTask(appCtx *AppContext) {
 	if len(allResults) == 0 {
 		log.Println("[info] 在设定的时间范围内没有找到任何更新的 Gist 或有效结果。任务结束。")
 		log.Println("============================ T A S K   F I N I S H E D ============================\n")
-		return
+		return resultGistID
 	}
 	log.Printf("[PHASE 1 COMPLETE] Fetched a total of %d valid results from recently updated Gists.", len(allResults))
 
@@ -135,21 +133,21 @@ func runTask(appCtx *AppContext) {
 	updatesMade, err := UpdateAll(selected, cfg)
 	if err != nil {
 		log.Printf("[FATAL] A critical error occurred during DNS update: %v", err)
-		return
+		return resultGistID
 	}
 	log.Println("[PHASE 3 COMPLETE]")
 
+	var newGistID = resultGistID
 	if updatesMade > 0 {
 		log.Println("\n[PHASE 4] UPLOADING RESULT GIST...")
 		filesToUpload := models.BuildResultGistFiles(selected)
-		originalGistID := appCtx.GistID
-		outGistID, err := gc.CreateOrUpdateResultGist(originalGistID, filesToUpload)
+		outGistID, err := gc.CreateOrUpdateResultGist(resultGistID, filesToUpload)
 		if err != nil {
 			log.Fatalf("[FATAL] Failed to push result Gist: %v", err)
 		}
 
-		if originalGistID == "" && outGistID != "" {
-			appCtx.GistID = outGistID
+		if resultGistID == "" && outGistID != "" {
+			newGistID = outGistID
 			log.Println("------------------------------------------------------------------------")
 			log.Printf("[ACTION REQUIRED] New Result Gist created with ID: %s", outGistID)
 			log.Printf("                  It is recommended to add this ID to your 'config.yml'.")
@@ -164,6 +162,7 @@ func runTask(appCtx *AppContext) {
 		log.Println("\n[PHASE 4] SKIPPED: No DNS updates were made, so result Gist was not updated.")
 	}
 	log.Println("============================ T A S K   F I N I S H E D ============================\n")
+	return newGistID
 }
 
 func main() {
@@ -171,44 +170,74 @@ func main() {
 	log.Println(" M U L T I - N E T   C O N T R O L L E R   S T A R T I N G")
 	log.Println("========================================================================")
 
-	cfg, err := config.Load(configFilePath)
+	// [修改] 首次加载配置仅用于获取 cron 表达式和启动前检查
+	initialCfg, err := config.Load(configFilePath)
 	if err != nil {
-		log.Fatalf("[error] Failed to load config: %v", err)
+		log.Fatalf("[error] Failed to load initial config: %v", err)
 	}
 	
-	if cfg.Cron.Spec == "" {
+	if initialCfg.Cron.Spec == "" {
 		log.Fatalf("[FATAL] 'cron.spec' is not set in config.yml. Please add a valid cron expression to proceed.")
 	}
 
-	// 准备应用上下文
-	appCtx := &AppContext{Config: cfg}
+	// [修改] AppContext 仅用于存储需要在任务执行间保持状态的 resultGistID
+	appCtx := &AppContext{}
+
+	// 创建 Cron 调度器
+	c := cron.New()
 	
-	// 加载 Gist ID
-	gistID := cfg.Gist.ResultGistID
-	if gistID == "" {
-		idBytes, err := os.ReadFile(resultGistIDFilePath)
-		if err == nil {
-			savedID := strings.TrimSpace(string(idBytes))
-			if savedID != "" {
-				log.Printf("[info] Found saved result_gist_id: %s", savedID)
-				gistID = savedID
+	// [核心修改] 将所有逻辑（包括配置重载）放入 cron 执行的函数中
+	_, err = c.AddFunc(initialCfg.Cron.Spec, func() {
+		// --- 1. 热重载配置 ---
+		log.Println("[info] Reloading configuration from", configFilePath)
+		cfg, err := config.Load(configFilePath)
+		if err != nil {
+			log.Printf("[error] Failed to reload config, skipping run: %v", err)
+			return
+		}
+
+		// --- 2. 重新加载 Gist ID 状态 ---
+		// 优先使用配置文件中的 Gist ID
+		gistID := cfg.Gist.ResultGistID
+		if gistID == "" {
+			// 如果配置文件为空，则尝试从上下文（上次运行的结果）获取
+			gistID = appCtx.ResultGistID
+			if gistID == "" {
+				// 如果上下文也为空（首次运行），则从本地文件加载
+				idBytes, err := os.ReadFile(resultGistIDFilePath)
+				if err == nil {
+					savedID := strings.TrimSpace(string(idBytes))
+					if savedID != "" {
+						log.Printf("[info] Found saved result_gist_id from file: %s", savedID)
+						gistID = savedID
+					}
+				}
 			}
 		}
-	}
-	appCtx.GistID = gistID
+		
+		// --- 3. 执行核心任务 ---
+		newGistID := runTask(cfg, gistID)
 
-	// 设置 Cron 调度器
-	c := cron.New()
-	_, err = c.AddFunc(cfg.Cron.Spec, func() { runTask(appCtx) })
+		// --- 4. 更新状态 ---
+		// 将新创建的 Gist ID 保存到上下文中，供下次任务使用
+		if newGistID != "" && appCtx.ResultGistID != newGistID {
+			log.Printf("[info] Updating Gist ID in context to: %s", newGistID)
+			appCtx.ResultGistID = newGistID
+		}
+	})
+
 	if err != nil {
-		log.Fatalf("[FATAL] Invalid cron spec '%s': %v", cfg.Cron.Spec, err)
+		log.Fatalf("[FATAL] Invalid cron spec '%s': %v", initialCfg.Cron.Spec, err)
 	}
 	
-	// 立即执行一次任务，然后启动定时器
-	go runTask(appCtx)
+	// 启动定时器，并立即触发一次任务
 	c.Start()
+	log.Printf("Cron scheduler started with spec: '%s'. Triggering initial run...", initialCfg.Cron.Spec)
 	
-	log.Printf("Cron scheduler started with spec: '%s'. Waiting for jobs...", cfg.Cron.Spec)
+	// 立即执行一次任务
+	if len(c.Entries()) > 0 {
+		c.Entries()[0].Job.Run()
+	}
 	
 	// 优雅地关闭
 	sig := make(chan os.Signal, 1)
